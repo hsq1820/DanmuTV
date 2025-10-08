@@ -1,0 +1,123 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build for Windows
+        if: matrix.os == 'windows-latest'
+        run: pnpm electron:build:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false  # 禁用代码签名
+
+      - name: Build for macOS
+        if: matrix.os == 'macos-latest'
+        run: pnpm electron:build:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false  # 禁用代码签名
+
+      - name: Build for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm electron:build:linux
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: danmutv-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.zip
+            release/*.blockmap
+            release/*.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-artifacts/**/*
+          body: |
+            ## 🎉 DanmuTV ${{ github.ref_name }}
+            
+            基于 [MoonTV](https://github.com/MoonTechLab/LunaTV) 二次开发的弹幕影视播放器
+            
+            ### 📥 下载
+            
+            #### Windows (推荐大多数用户)
+            - **DanmuTV Setup x.x.x.exe** - NSIS安装包(推荐)
+            - **DanmuTV x.x.x.exe** - 便携版单文件
+            
+            #### macOS
+            - **DanmuTV-x.x.x-arm64.dmg** - Apple Silicon (M1/M2/M3 芯片)
+            - **DanmuTV-x.x.x-x64.dmg** - Intel 芯片
+            
+            #### Linux
+            - **DanmuTV-x.x.x.AppImage** - 通用格式(推荐,双击运行)
+            - **DanmuTV-x.x.x.deb** - Debian/Ubuntu 系统
+            - **DanmuTV-x.x.x.rpm** - RedHat/CentOS/Fedora 系统
+            
+            ### ✨ 主要功能
+            - 💬 **弹幕系统** - 支持 Bilibili 弹幕加载、关键词屏蔽、密度控制
+            - 🔍 **多源搜索** - 整合多个影视资源站点
+            - 📝 **播放记录** - 自动记录观看进度,断点续播
+            - ⭐ **收藏管理** - 收藏喜爱的影视作品
+            - 🎬 **豆瓣推荐** - 集成豆瓣电影推荐
+            
+            ### 🎬 使用指南
+            1. 搜索影视 → 选择剧集 → 开始播放
+            2. 点击弹幕按钮 → 粘贴B站链接或输入BV号
+            3. 右键播放器 → 弹幕设置 → 关键词屏蔽/密度限制
+            
+            ### ⚠️ 免责声明
+            - 本软件仅供学习交流使用
+            - 所有资源来自互联网公开聚合
+            - 请遵守当地法律法规,支持正版
+            
+            ---
+            
+            Made with ❤️ for Danmaku Lovers
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

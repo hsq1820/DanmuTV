@@ -1,0 +1,129 @@
+{
+  "name": "danmutv",
+  "version": "1.0.0",
+  "description": "基于 MoonTV 二次开发的支持弹幕的桌面影视播放器",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "build": "next build",
+    "start": "next start",
+    "electron": "electron .",
+    "electron:build": "next build && electron-builder",
+    "electron:build:win": "next build && electron-builder --win --x64",
+    "electron:build:mac": "next build && electron-builder --mac",
+    "electron:build:linux": "next build && electron-builder --linux"
+  },
+  "keywords": [
+    "danmaku",
+    "danmu",
+    "video-player",
+    "bilibili",
+    "electron",
+    "nextjs",
+    "desktop-app"
+  ],
+  "author": "DanmuTV Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YourUsername/DanmuTV.git"
+  },
+  "homepage": "https://github.com/YourUsername/DanmuTV#readme",
+  "dependencies": {
+    "@upstash/redis": "^1.35.5",
+    "artplayer": "^5.2.1",
+    "artplayer-plugin-danmuku": "^5.2.0",
+    "hls.js": "^1.6.13",
+    "idb": "^8.0.0",
+    "lucide-react": "^0.460.0",
+    "next": "^14.2.0",
+    "next-themes": "^0.4.6",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "redis": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.4",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.danmutv.app",
+    "productName": "DanmuTV",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      ".next/**/*",
+      "public/**/*",
+      "package.json",
+      "node_modules/**/*",
+      "!node_modules/@next/swc-darwin-*/**/*",
+      "!node_modules/@next/swc-linux-*/**/*",
+      "!node_modules/@next/swc-win32-arm64-*/**/*",
+      "!node_modules/@next/swc-win32-ia32-*/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/next/**/*",
+      ".next/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icon.ico",
+      "sign": null,
+      "signingHashAlgorithms": []
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "public/logo.png",
+      "category": "public.app-category.entertainment"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/logo.png",
+      "category": "AudioVideo",
+      "maintainer": "DanmuTV Team",
+      "description": "基于 MoonTV 二次开发的支持弹幕的桌面影视播放器"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

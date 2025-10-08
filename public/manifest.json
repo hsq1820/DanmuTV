@@ -1,0 +1,16 @@
+{
+  "name": "DanmuTV",
+  "short_name": "DanmuTV",
+  "description": "弹幕影视播放器 - 支持在线影视搜索、播放和弹幕功能",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

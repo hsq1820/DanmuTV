@@ -1,0 +1,191 @@
+# DanmuTV - 弹幕影视播放器
+
+<div align="center">
+  <img src="./public/icon.svg" alt="DanmuTV Logo" width="120" />
+  <h3>🎬 支持弹幕的桌面影视播放器</h3>
+  <p>基于 MoonTV 二次开发，专注于弹幕体验的跨平台桌面应用</p>
+</div>
+
+---
+
+## 📝 项目说明
+
+DanmuTV 是基于 [MoonTV](https://github.com/MoonTechLab/LunaTV) 进行二次开发的影视播放器。
+
+**核心特点**:
+- 💬 **完整的弹幕系统** - 支持 Bilibili 弹幕加载、关键词屏蔽、密度控制
+- 💾 **本地数据存储** - 使用 localStorage，完全离线可用
+- 🖥️ **桌面应用优化** - 专为 Electron 打包优化
+- 🎨 **自定义 UI** - 优化的弹幕控制面板和用户交互
+
+## 🎬 使用指南
+
+### 1️⃣ 搜索与播放
+- 在首页搜索框输入影视名称
+- 点击搜索结果查看详情页
+- 选择剧集或分辨率开始播放
+- 支持多个视频源切换
+
+### 2️⃣ 加载弹幕
+- **方式一**: 粘贴 B站视频链接（自动解析）
+- **方式二**: 输入 BV 号
+- **方式三**: 输入 CID（B站视频ID）
+- **方式四**: 上传本地 XML 弹幕文件
+- 支持番剧 Season ID 和 Media ID
+
+### 3️⃣ 弹幕设置
+- **关键词屏蔽**: 过滤包含特定词汇的弹幕
+- **密度限制**: 控制每秒显示的弹幕数量
+- **时间对轴**: 调整弹幕与视频的时间差
+- **片头片尾跳过**: 自动记忆并跳过固定片段
+- 所有设置自动保存，下次观看自动应用
+
+### 4️⃣ 其他功能
+- **播放记录**: 自动记录观看进度，支持断点续播
+- **收藏管理**: 收藏喜爱的影视作品，快速访问
+- **豆瓣推荐**: 浏览豆瓣高分电影和电视剧
+- **视频源管理**: 自定义添加、编辑视频源
+
+## ✨ 主要特性
+
+### 🎯 核心功能
+- **多源搜索** - 整合多个影视资源站点，一键搜索
+- **在线播放** - 无需下载，即点即播
+- **弹幕支持** - 完整的弹幕加载、过滤、配置系统
+- **播放记录** - 自动记录进度，断点续播
+- **收藏管理** - 收藏喜爱的影视作品
+- **豆瓣推荐** - 集成豆瓣电影推荐
+
+### 💬 弹幕系统
+- **多种加载方式**
+  - Bilibili CID
+  - Bilibili BV 号（支持分 P）
+  - Season ID / Media ID（番剧/电影）
+  - 直接粘贴 B站链接自动解析
+  - 本地 XML 弹幕文件
+  
+- **智能过滤**
+  - 关键词屏蔽（支持多个关键词）
+  - 密度限制（控制每秒弹幕数量）
+  - 时间对轴调整
+  
+- **自动保存**
+  - 弹幕加载历史自动记录
+  - 下次打开自动加载上次弹幕
+  - 片头片尾跳过配置保存
+
+### 💾 本地存储
+- 所有数据保存在本地（`%APPDATA%\DanmuTV`）
+- 隐私安全，数据完全掌控
+
+## 📦 安装使用
+
+### Windows
+1. 下载 `DanmuTV.exe` 
+2. 双击运行即可使用（便携版）
+3. 或下载安装包 `DanmuTV-Setup.exe` 进行完整安装
+
+### 构建说明
+如需自行打包:
+```bash
+# 安装依赖
+pnpm install
+
+# 打包 Windows 版本
+pnpm electron:build:win
+
+# 打包文件位于 release 目录
+```
+
+## 🎯 技术栈
+
+- **Electron** - 桌面应用框架
+- **Next.js 14** - React SSR 框架
+- **TypeScript** - 类型安全
+- **Tailwind CSS** - UI 样式
+- **ArtPlayer** - 视频播放器
+- **artplayer-plugin-danmuku** - 弹幕插件
+
+## 🔧 开发
+
+```bash
+# 安装依赖
+pnpm install
+
+# 开发模式
+pnpm dev
+
+# 打包应用
+pnpm electron:build:win   # Windows
+pnpm electron:build:mac   # macOS
+pnpm electron:build:linux # Linux
+```
+
+## 📂 项目结构
+
+```
+DanmuTV/
+├── electron/              # Electron 主进程
+│   └── main.js           # 窗口创建、服务器启动
+├── src/
+│   ├── app/              # Next.js 页面
+│   │   ├── page.tsx      # 首页
+│   │   ├── search/       # 搜索页
+│   │   ├── douban/       # 豆瓣推荐
+│   │   └── play/         # 播放页（核心）
+│   ├── components/       # React 组件
+│   │   ├── UserMenu.tsx  # 视频源管理
+│   │   └── ...
+│   └── lib/              # 工具库
+│       ├── db.client.ts  # 本地存储
+│       ├── client-search.ts # 客户端搜索
+│       └── default-video-sources.ts # 默认视频源
+├── public/               # 静态资源
+└── package.json
+```
+
+## ⚙️ 配置文件位置
+
+- **Windows**: `C:\Users\<用户名>\AppData\Roaming\DanmuTV\`
+- **macOS**: `~/Library/Application Support/DanmuTV/`
+- **Linux**: `~/.config/DanmuTV/`
+
+数据包括：
+- `danmutv_play_records` - 播放记录
+- `danmutv_favorites` - 收藏列表
+- `danmutv_search_history` - 搜索历史
+- `danmaku_keywords` - 关键词屏蔽
+- `danmaku_limit_per_sec` - 密度限制
+- `danmutv_video_sources` - 视频源配置
+
+## 🐛 问题反馈
+
+如遇到问题，请提供以下信息:
+1. 操作系统版本
+2. 软件版本号
+3. 详细的错误描述或截图
+4. 复现步骤
+
+## ⚠️ 免责声明
+
+- 本软件仅供学习交流使用
+- 所有资源来自互联网公开聚合，不存储任何影视资源
+- 请遵守当地法律法规，支持正版
+- 如有侵权，请联系删除
+
+## 📄 许可证
+
+MIT License
+
+## 🙏 致谢
+
+- 感谢 [MoonTV](https://github.com/MoonTechLab/LunaTV) 提供优秀的基础框架
+- 感谢 [ArtPlayer](https://artplayer.org/) 提供强大的播放器
+- 感谢所有开源项目的贡献者
+
+---
+
+<div align="center">
+  <p>如果觉得这个项目对你有帮助，请给个 ⭐ Star 支持一下!</p>
+  <p>Made with ❤️ for Danmaku Lovers</p>
+</div>
