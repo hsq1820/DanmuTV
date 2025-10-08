@@ -92,17 +92,15 @@ jobs:
             ### 📥 下载
             
             #### Windows (推荐大多数用户)
-            - **DanmuTV Setup x.x.x.exe** - NSIS安装包(推荐)
-            - **DanmuTV x.x.x.exe** - 便携版单文件
+            - **DanmuTV Setup 1.0.0.exe** - NSIS安装包(推荐)
+            - **DanmuTV 1.0.0.exe** - 便携版单文件
             
             #### macOS
-            - **DanmuTV-x.x.x-arm64.dmg** - Apple Silicon (M1/M2/M3 芯片)
-            - **DanmuTV-x.x.x-x64.dmg** - Intel 芯片
+            - **DanmuTV-1.0.0-arm64.dmg** - Apple Silicon (M1/M2/M3 芯片)
+            - **DanmuTV-1.0.0.dmg** - Intel 芯片
             
             #### Linux
-            - **DanmuTV-x.x.x.AppImage** - 通用格式(推荐,双击运行)
-            - **DanmuTV-x.x.x.deb** - Debian/Ubuntu 系统
-            - **DanmuTV-x.x.x.rpm** - RedHat/CentOS/Fedora 系统
+            - **DanmuTV-1.0.0.AppImage** - 通用格式(推荐,双击运行)
             
             ### ✨ 主要功能
             - 💬 **弹幕系统** - 支持 Bilibili 弹幕加载、关键词屏蔽、密度控制
