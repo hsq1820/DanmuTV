@@ -35,16 +35,20 @@ jobs:
         run: pnpm electron:build:win
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false  # 禁用代码签名
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 添加 GitHub Token
 
       - name: Build for macOS
         if: matrix.os == 'macos-latest'
         run: pnpm electron:build:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false  # 禁用代码签名
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 添加 GitHub Token
 
       - name: Build for Linux
         if: matrix.os == 'ubuntu-latest'
         run: pnpm electron:build:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 添加 GitHub Token
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
