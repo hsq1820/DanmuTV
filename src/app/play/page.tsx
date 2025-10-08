@@ -162,6 +162,7 @@ function PlayPageClient() {
   const [danmakuOffset, setDanmakuOffset] = useState(0); // 秒，可正可负
   const danmakuPluginRef = useRef<any>(null);
   const danmakuFileRef = useRef<File | null>(null); // 存储本地弹幕文件
+  const isFirstLoadRef = useRef(true); // 标记是否是首次加载
   // 弹幕高级加载面板
   const [danmakuPanelOpen, setDanmakuPanelOpen] = useState(false);
   type DanmakuSourceType =
@@ -1554,6 +1555,20 @@ function PlayPageClient() {
           episodes.push(...episodeList.map((ep: string) => ep.split('$')[1] || ep));
         }
         
+        // 处理描述字段，去除HTML标签
+        let description = detailData.vod_content || '';
+        if (description) {
+          // 移除HTML标签
+          description = description.replace(/<[^>]+>/g, '');
+          // 解码HTML实体
+          description = description.replace(/&nbsp;/g, ' ')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+        }
+        
         const result: SearchResult = {
           id: String(detailData.vod_id),
           title: detailData.vod_name,
@@ -1563,7 +1578,7 @@ function PlayPageClient() {
           source_name: detailData.source_name || source,
           year: String(detailData.vod_year || 'unknown'),
           type_name: detailData.type_name || detailData.vod_class || '',
-          desc: detailData.vod_content || '',
+          desc: description,
         };
         
         setAvailableSources([result]);
@@ -2868,28 +2883,35 @@ function PlayPageClient() {
 
     // 自动加载弹幕
     const autoLoad = async () => {
-      // 首先强制清空当前弹幕（每次切换集数都清空）
-      const plugin = getDanmakuPlugin();
-      if (plugin) {
-        try {
-          console.log(
-            '[danmaku] 切换集数，清空弹幕（使用官方API）',
-            currentEpisodeIndex
-          );
+      // 首次进入不清空弹幕，后续切集时才清空
+      if (!isFirstLoadRef.current) {
+        // 首先强制清空当前弹幕（每次切换集数都清空）
+        const plugin = getDanmakuPlugin();
+        if (plugin) {
+          try {
+            console.log(
+              '[danmaku] 切换集数，清空弹幕（使用官方API）',
+              currentEpisodeIndex
+            );
 
-          // 使用官方推荐的方式：config + load 组合
-          plugin.config({
-            danmuku: [], // 空数组表示清空弹幕库
-          });
-          plugin.load(); // 加载空弹幕库，实现清空效果
+            // 使用官方推荐的方式：config + load 组合
+            plugin.config({
+              danmuku: [], // 空数组表示清空弹幕库
+            });
+            plugin.load(); // 加载空弹幕库，实现清空效果
 
-          // 清空历史数据引用
-          lastDanmakuDataRef.current = null;
+            // 清空历史数据引用
+            lastDanmakuDataRef.current = null;
 
-          console.log('[danmaku] 弹幕库已切换为空');
-        } catch (e) {
-          console.warn('[danmaku] 清空弹幕失败', e);
+            console.log('[danmaku] 弹幕库已切换为空');
+          } catch (e) {
+            console.warn('[danmaku] 清空弹幕失败', e);
+          }
         }
+      } else {
+        // 标记首次加载完成
+        isFirstLoadRef.current = false;
+        console.log('[danmaku] 首次进入，准备加载弹幕');
       }
 
       try {

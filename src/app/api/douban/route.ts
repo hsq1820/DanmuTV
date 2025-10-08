@@ -13,11 +13,10 @@ interface DoubanApiResponse {
 }
 
 async function fetchDoubanData(url: string): Promise<DoubanApiResponse> {
-  // 添加超时控制
+  // 通过 Cors Proxy By Zwei 转发豆瓣API
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
-
-  // 设置请求选项，包括信号和头部
+  const proxyUrl = `https://cors.zme.ink/${encodeURIComponent(url)}`;
   const fetchOptions = {
     signal: controller.signal,
     headers: {
@@ -27,16 +26,12 @@ async function fetchDoubanData(url: string): Promise<DoubanApiResponse> {
       Accept: 'application/json, text/plain, */*',
     },
   };
-
   try {
-    // 尝试直接访问豆瓣API
-    const response = await fetch(url, fetchOptions);
+    const response = await fetch(proxyUrl, fetchOptions);
     clearTimeout(timeoutId);
-
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
-
     return await response.json();
   } catch (error) {
     clearTimeout(timeoutId);

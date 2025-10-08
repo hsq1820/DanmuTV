@@ -5,10 +5,19 @@ export const runtime = 'edge';
 // OrionTV 兼容接口
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const imageUrl = searchParams.get('url');
+  let imageUrl = searchParams.get('url');
 
   if (!imageUrl) {
     return NextResponse.json({ error: 'Missing image URL' }, { status: 400 });
+  }
+
+  // 如果是豆瓣图片，自动切换到官方精品CDN（阿里云）
+  // 例如 http(s)://img[0-9].doubanio.com/view/photo/s_ratio_poster/public/p123456.jpg
+  const doubanCdnPrefix = 'https://img9.doubanio.com';
+  const doubanPattern = /^https?:\/\/img\d+\.doubanio\.com(\/.*)/;
+  const match = imageUrl.match(doubanPattern);
+  if (match) {
+    imageUrl = doubanCdnPrefix + match[1];
   }
 
   try {
