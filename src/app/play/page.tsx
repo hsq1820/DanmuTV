@@ -1609,8 +1609,27 @@ function PlayPageClient() {
                 (searchType === 'movie' && result.episodes.length === 1)
               : true)
         );
-        setAvailableSources(filteredResults);
-        return filteredResults;
+        
+        // 清理每个结果的 desc 字段中的 HTML 标签
+        const cleanedResults = filteredResults.map(result => {
+          if (result.desc) {
+            let cleanDesc = result.desc;
+            // 移除HTML标签
+            cleanDesc = cleanDesc.replace(/<[^>]+>/g, '');
+            // 解码HTML实体
+            cleanDesc = cleanDesc.replace(/&nbsp;/g, ' ')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&amp;/g, '&')
+              .replace(/&quot;/g, '"')
+              .replace(/&#39;/g, "'");
+            return { ...result, desc: cleanDesc };
+          }
+          return result;
+        });
+        
+        setAvailableSources(cleanedResults);
+        return cleanedResults;
       } catch (err) {
         setSourceSearchError(err instanceof Error ? err.message : '搜索失败');
         setAvailableSources([]);
@@ -2879,10 +2898,19 @@ function PlayPageClient() {
 
   // 自动加载弹幕历史记录
   useEffect(() => {
-    if (!artPlayerRef.current) return;
+    // 确保播放器已初始化
+    if (!artPlayerRef.current) {
+      console.log('[danmaku] 播放器未初始化，等待...');
+      return;
+    }
 
     // 自动加载弹幕
     const autoLoad = async () => {
+      console.log('[danmaku] autoLoad 触发', {
+        isFirstLoad: isFirstLoadRef.current,
+        currentEpisodeIndex,
+      });
+
       // 首次进入不清空弹幕，后续切集时才清空
       if (!isFirstLoadRef.current) {
         // 首先强制清空当前弹幕（每次切换集数都清空）
@@ -3002,7 +3030,7 @@ function PlayPageClient() {
     // 延迟一点时间等待播放器完全初始化
     const timer = setTimeout(autoLoad, 1500);
     return () => clearTimeout(timer);
-  }, [currentEpisodeIndex]); // 只依赖集数变化
+  }, [currentEpisodeIndex, artPlayerRef.current]); // 依赖集数变化和播放器初始化
 
   if (loading) {
     return (
