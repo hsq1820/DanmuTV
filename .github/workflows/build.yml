@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:  # 允许手动触发
 
+permissions:
+  contents: write  # 允许创建 Release 和上传文件
+
 jobs:
   build:
     strategy:
