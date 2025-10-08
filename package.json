@@ -26,9 +26,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YourUsername/DanmuTV.git"
+    "url": "https://github.com/hsq1820/DanmuTV.git"
   },
-  "homepage": "https://github.com/YourUsername/DanmuTV#readme",
+  "homepage": "https://github.com/hsq1820/DanmuTV#readme",
   "dependencies": {
     "@upstash/redis": "^1.35.5",
     "artplayer": "^5.2.1",
