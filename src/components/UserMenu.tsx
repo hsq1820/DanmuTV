@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 
 import { DEFAULT_VIDEO_SOURCES } from '@/lib/default-video-sources';
 import { checkForUpdates, CURRENT_VERSION, UpdateStatus } from '@/lib/version';
+import { showToast } from './GlobalToast';
 
 interface AuthInfo {
   username?: string;
@@ -470,6 +471,19 @@ export const UserMenu: React.FC = () => {
     );
     setVideoSources(newSources);
     localStorage.setItem('danmutv_video_sources', JSON.stringify(newSources));
+  };
+
+  const handleEnableAllAvailableSources = () => {
+    if (confirm('确定要启用所有可用视频源吗?\n\n这将清除测速时的屏蔽列表,所有未手动禁用的视频源都将被启用。建议仅在需要更多视频源时使用。')) {
+      // 清除测速时设置的屏蔽列表
+      localStorage.removeItem('danmutv_blocked_sources');
+      
+      showToast(
+        '已启用所有可用视频源!刷新页面后生效,搜索时将使用所有未被手动禁用的视频源。',
+        'success',
+        6000
+      );
+    }
   };
 
   // 桌面应用不需要管理面板和修改密码功能
@@ -1032,6 +1046,12 @@ export const UserMenu: React.FC = () => {
                 + 添加新视频源
               </button>
               <button
+                onClick={handleEnableAllAvailableSources}
+                className='w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 rounded-md transition-colors'
+              >
+                🚀 启用所有可用视频源
+              </button>
+              <button
                 onClick={() => {
                   if (confirm(`确定要重置为默认视频源吗?\n\n这将清除所有自定义配置,恢复 ${DEFAULT_VIDEO_SOURCES.length} 个默认视频源。`)) {
                     setVideoSources(DEFAULT_VIDEO_SOURCES);
@@ -1050,6 +1070,9 @@ export const UserMenu: React.FC = () => {
           <div className='mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md'>
             <p className='text-xs text-blue-800 dark:text-blue-300'>
               <strong>说明:</strong> 视频源配置保存在浏览器本地存储中。Key是视频源的唯一标识,添加后不可修改。API地址需要支持标准的采集接口格式。首次使用已自动加载 {DEFAULT_VIDEO_SOURCES.length} 个默认视频源。
+            </p>
+            <p className='text-xs text-blue-800 dark:text-blue-300 mt-2'>
+              <strong>提示:</strong> 应用启动时会自动测速并保留最快的前20个视频源。点击"启用所有可用视频源"可以清除速度限制,使用所有可用的视频源(可能会降低搜索速度)。
             </p>
           </div>
         </div>
