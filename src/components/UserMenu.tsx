@@ -528,6 +528,8 @@ export const UserMenu: React.FC = () => {
   // 拖动选择和Shift选择相关状态
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
+  const [dragEndIndex, setDragEndIndex] = useState<number | null>(null);
+  const [dragInitialState, setDragInitialState] = useState<boolean>(false);
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
 
   // 初始化默认保存路径
@@ -749,35 +751,30 @@ export const UserMenu: React.FC = () => {
 
   // 处理集数点击(支持Shift范围选择)
   const handleEpisodeClick = (index: number, event: React.MouseEvent) => {
-    // 如果发生了拖动,不处理点击
-    if (dragStartIndex !== null && dragStartIndex !== index) {
-      return;
-    }
-    
     if (event.shiftKey && lastClickedIndex !== null) {
-      // Shift + 点击：范围选择
+      // Shift + 点击：范围选择 (始终选中范围内的所有项)
+      event.preventDefault();
+      event.stopPropagation();
       const start = Math.min(lastClickedIndex, index);
       const end = Math.max(lastClickedIndex, index);
       const newEps = [...episodes];
-      const targetState = !newEps[lastClickedIndex].selected;
       for (let i = start; i <= end; i++) {
-        newEps[i].selected = targetState;
+        newEps[i].selected = true;
       }
       setEpisodes(newEps);
-    } else if (!isDragging) {
-      // 普通点击：单个切换 (仅当没有发生拖动时)
-      const newEps = [...episodes];
-      newEps[index].selected = !newEps[index].selected;
-      setEpisodes(newEps);
-      setLastClickedIndex(index);
+      // 不更新 lastClickedIndex，保持原来的锚点
     }
+    // 普通点击由 handleMouseUp 处理，这里不再处理
   };
 
   // 处理拖动开始
   const handleMouseDown = (index: number, event: React.MouseEvent) => {
     if (event.shiftKey) return; // Shift点击时不触发拖动
+    event.preventDefault(); // 防止文本选择
     setDragStartIndex(index);
-    setLastClickedIndex(index);
+    setDragEndIndex(index);
+    // 记录起始点的状态，拖动时将切换为相反状态
+    setDragInitialState(!episodes[index].selected);
   };
 
   // 处理拖动经过
@@ -787,36 +784,46 @@ export const UserMenu: React.FC = () => {
     // 只有当鼠标移动到不同的项时才认为是拖动
     if (index !== dragStartIndex && !isDragging) {
       setIsDragging(true);
-      const newEps = [...episodes];
-      newEps[dragStartIndex].selected = !newEps[dragStartIndex].selected;
-      setEpisodes(newEps);
     }
     
-    if (isDragging) {
-      const newEps = [...episodes];
-      const targetState = episodes[dragStartIndex].selected;
-      newEps[index].selected = targetState;
-      setEpisodes(newEps);
-    }
+    // 更新拖动结束位置
+    setDragEndIndex(index);
   };
 
   // 处理拖动结束
   const handleMouseUp = () => {
+    if (dragStartIndex !== null) {
+      if (isDragging && dragEndIndex !== null) {
+        // 发生了拖动，应用范围选择
+        const start = Math.min(dragStartIndex, dragEndIndex);
+        const end = Math.max(dragStartIndex, dragEndIndex);
+        const newEps = [...episodes];
+        for (let i = start; i <= end; i++) {
+          newEps[i].selected = dragInitialState;
+        }
+        setEpisodes(newEps);
+        setLastClickedIndex(dragStartIndex);
+      } else {
+        // 没有拖动，单击处理
+        const newEps = [...episodes];
+        newEps[dragStartIndex].selected = !newEps[dragStartIndex].selected;
+        setEpisodes(newEps);
+        setLastClickedIndex(dragStartIndex);
+      }
+    }
+    
     setIsDragging(false);
     setDragStartIndex(null);
+    setDragEndIndex(null);
   };
 
   // 添加全局鼠标释放监听
   useEffect(() => {
-    if (isDragging) {
-      const handleGlobalMouseUp = () => {
-        setIsDragging(false);
-        setDragStartIndex(null);
-      };
-      document.addEventListener('mouseup', handleGlobalMouseUp);
-      return () => document.removeEventListener('mouseup', handleGlobalMouseUp);
+    if (dragStartIndex !== null) {
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => document.removeEventListener('mouseup', handleMouseUp);
     }
-  }, [isDragging]);
+  }, [dragStartIndex, dragEndIndex, isDragging, episodes, dragInitialState]);
 
   // 下载弹幕
   const handleDanmakuDownload = async () => {
@@ -1792,39 +1799,51 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         </div>
                       </div>
                       <div className='border border-gray-300 dark:border-gray-600 rounded-md max-h-64 overflow-y-auto'>
-                        {episodes.map((ep, index) => (
-                          <div
-                            key={index}
-                            className={`flex items-center px-3 py-2 border-b border-gray-200 dark:border-gray-700 last:border-b-0 cursor-pointer transition-colors ${
-                              ep.selected 
-                                ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30' 
-                                : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-                            }`}
-                            onClick={(e) => handleEpisodeClick(index, e)}
-                            onMouseDown={(e) => handleMouseDown(index, e)}
-                            onMouseEnter={() => handleMouseEnter(index)}
-                            onMouseUp={handleMouseUp}
-                            style={{ userSelect: 'none' }}
-                          >
-                            <input
-                              type='checkbox'
-                              checked={ep.selected || false}
-                              onChange={() => {}}
-                              className='mr-2 pointer-events-none'
-                            />
-                            <div className='flex-1 text-sm text-gray-900 dark:text-gray-100'>
-                              {ep.title}
-                            </div>
-                            <div className='text-xs text-gray-500 dark:text-gray-400 mr-2'>
-                              CID: {ep.cid}
-                            </div>
-                            {ep.section && (
-                              <div className='text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded'>
-                                {ep.section}
+                        {episodes.map((ep, index) => {
+                          // 计算是否在拖动范围内(用于预览)
+                          const isInDragRange = isDragging && 
+                            dragStartIndex !== null && 
+                            dragEndIndex !== null &&
+                            index >= Math.min(dragStartIndex, dragEndIndex) &&
+                            index <= Math.max(dragStartIndex, dragEndIndex);
+                          
+                          // 确定显示状态：拖动时显示预览状态，否则显示实际状态
+                          const displaySelected = isInDragRange ? dragInitialState : ep.selected;
+                          
+                          return (
+                            <div
+                              key={index}
+                              className={`flex items-center px-3 py-2 border-b border-gray-200 dark:border-gray-700 last:border-b-0 cursor-pointer transition-colors ${
+                                displaySelected
+                                  ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30' 
+                                  : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                              } ${isInDragRange ? 'ring-2 ring-blue-300 dark:ring-blue-700 ring-inset' : ''}`}
+                              onClick={(e) => handleEpisodeClick(index, e)}
+                              onMouseDown={(e) => handleMouseDown(index, e)}
+                              onMouseEnter={() => handleMouseEnter(index)}
+                              onMouseUp={handleMouseUp}
+                              style={{ userSelect: 'none' }}
+                            >
+                              <input
+                                type='checkbox'
+                                checked={displaySelected || false}
+                                onChange={() => {}}
+                                className='mr-2 pointer-events-none'
+                              />
+                              <div className='flex-1 text-sm text-gray-900 dark:text-gray-100'>
+                                {ep.title}
                               </div>
-                            )}
-                          </div>
-                        ))}
+                              <div className='text-xs text-gray-500 dark:text-gray-400 mr-2'>
+                                CID: {ep.cid}
+                              </div>
+                              {ep.section && (
+                                <div className='text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded'>
+                                  {ep.section}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
