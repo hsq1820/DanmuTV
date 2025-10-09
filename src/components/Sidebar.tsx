@@ -53,16 +53,6 @@ declare global {
   }
 }
 
-// 判断是否为 MoonTV 模块页面
-const isMoonTVPage = (path: string) => {
-  return (
-    path.startsWith('/moontv') ||
-    path.startsWith('/search') ||
-    path.startsWith('/douban') ||
-    path.startsWith('/play')
-  );
-};
-
 const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
   const router = useRouter();
   const pathname = usePathname();

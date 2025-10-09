@@ -14,24 +14,14 @@ interface MobileBottomNavProps {
   activePath?: string;
 }
 
-// 判断是否为 MoonTV 模块页面
-const isMoonTVPage = (path: string) => {
-  return (
-    path.startsWith('/moontv') ||
-    path.startsWith('/search') ||
-    path.startsWith('/douban') ||
-    path.startsWith('/play')
-  );
-};
-
 const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
   const pathname = usePathname();
 
   // 当前激活路径：优先使用传入的 activePath，否则回退到浏览器地址
   const currentActive = activePath ?? pathname;
 
-  // 根据当前路径决定首页链接
-  const homeHref = isMoonTVPage(activePath ?? pathname) ? '/moontv' : '/';
+  // DanmuTV 统一使用 '/' 作为首页
+  const homeHref = '/';
 
   const [hasCustomCategories, setHasCustomCategories] = useState(false);
 

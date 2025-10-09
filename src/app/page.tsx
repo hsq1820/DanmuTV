@@ -125,7 +125,7 @@ function HomeClient() {
   };
 
   return (
-    <PageLayout activePath='/moontv'>
+    <PageLayout activePath='/'>
       <div className='px-2 sm:px-10 py-4 sm:py-8 overflow-visible'>
         <div className='mb-8 flex justify-center'>
           <CapsuleSwitch
