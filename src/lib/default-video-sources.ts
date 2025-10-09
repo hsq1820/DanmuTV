@@ -381,13 +381,6 @@ export const DEFAULT_VIDEO_SOURCES: VideoSource[] = [
     disabled: false,
   },
   {
-    key: 'xiaoji',
-    name: '小鸡资源',
-    api: 'https://api.xiaojizy.live/provide/vod',
-    detail: '',
-    disabled: false,
-  },
-  {
     key: 'kuaiche',
     name: '快车资源',
     api: 'https://caiji.kuaichezy.org/api.php/provide',
