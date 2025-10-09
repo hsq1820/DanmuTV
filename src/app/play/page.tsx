@@ -203,6 +203,28 @@ function PlayPageClient() {
       return '';
     }
   });
+  // 弹幕合并开关
+  const [danmakuMergeEnabled, setDanmakuMergeEnabled] = useState<boolean>(() => {
+    try {
+      const v = typeof window !== 'undefined'
+        ? localStorage.getItem('danmaku_merge_enabled')
+        : null;
+      return v === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [danmakuMergeWindow, setDanmakuMergeWindow] = useState<number>(() => {
+    try {
+      const v = typeof window !== 'undefined'
+        ? localStorage.getItem('danmaku_merge_window')
+        : null;
+      const n = v ? Number(v) : 5; // 默认5秒窗口
+      return Number.isFinite(n) && n > 0 ? n : 5;
+    } catch {
+      return 5;
+    }
+  });
   // 当插件未就绪时暂存待加载的数据源（URL 解析为数组后再存）；同样记录最近一次成功加载的数据源
   const pendingDanmakuDataRef = useRef<any[] | null>(null);
   const lastDanmakuDataRef = useRef<any[] | null>(null);
@@ -765,6 +787,70 @@ function PlayPageClient() {
     }
   };
 
+  // 弹幕合并：合并一段时间窗口内完全相同的弹幕
+  const mergeSimilarDanmaku = (danmakuList: any[], windowSeconds: number = 5): any[] => {
+    if (!danmakuList || danmakuList.length === 0) return [];
+    
+    const merged: any[] = [];
+    const sorted = [...danmakuList].sort((a, b) => a.time - b.time);
+    
+    for (let i = 0; i < sorted.length; i++) {
+      const current = sorted[i];
+      const currentText = (current.text || '').trim();
+      
+      if (!currentText) continue;
+      
+      // 查找是否可以合并到已有的弹幕
+      let foundMergeTarget = false;
+      
+      for (let j = merged.length - 1; j >= 0; j--) {
+        const target = merged[j];
+        // 提取原始文本（去除可能已有的角标）
+        const targetText = (target.originalText || target.text || '').trim();
+        
+        // 时间超出窗口，后续不可能合并
+        if (current.time - target.time > windowSeconds) break;
+        
+        // 文本完全相同且在时间窗口内
+        if (targetText === currentText && current.time - target.time <= windowSeconds) {
+          // 合并：增加计数
+          const newCount = (target.mergeCount || 1) + 1;
+          target.mergeCount = newCount;
+          
+          // 计算字号增大：合并数越多字号越大
+          const baseFontSize = 25;
+          const sizeMultiplier = Math.min(1 + (newCount - 1) * 0.15, 2.5); // 最大2.5倍
+          const fontSize = Math.round(baseFontSize * sizeMultiplier);
+          
+          // 更新显示文本（添加角标）
+          target.text = `${currentText} ×${newCount}`;
+          
+          // 设置字号和样式
+          target.size = fontSize;
+          target.fontSize = fontSize;
+          if (newCount > 5) {
+            target.border = true; // 使用边框突出显示
+          }
+          
+          foundMergeTarget = true;
+          break;
+        }
+      }
+      
+      if (!foundMergeTarget) {
+        // 创建新弹幕条目
+        merged.push({
+          ...current,
+          mergeCount: 1, // 初始计数为1
+          originalText: currentText, // 保存原始文本
+        });
+      }
+    }
+    
+    console.log(`[danmaku] 弹幕合并完成: ${danmakuList.length} → ${merged.length} (减少 ${danmakuList.length - merged.length} 条)`);
+    return merged;
+  };
+
   // 解析工具：ASS（极简实现，仅取起始时间和文本）
   const parseASSToDanmaku = (assText: string): any[] => {
     const lines = assText.split(/\r?\n/);
@@ -824,6 +910,24 @@ function PlayPageClient() {
     let data = parseDanmakuText(text);
     console.log('[danmaku] 解析弹幕', { url, dataLen: data.length });
     if (!data.length) throw new Error('弹幕解析为空');
+
+    // 从localStorage读取最新的合并状态（避免闭包中的旧值）
+    let currentMergeEnabled = false;
+    let currentMergeWindow = 5;
+    try {
+      currentMergeEnabled = localStorage.getItem('danmaku_merge_enabled') === 'true';
+      const windowStr = localStorage.getItem('danmaku_merge_window');
+      currentMergeWindow = windowStr ? Number(windowStr) : 5;
+    } catch (e) {
+      console.warn('[danmaku] 读取合并设置失败', e);
+    }
+
+    // 应用弹幕合并（如果启用）
+    if (currentMergeEnabled) {
+      const beforeMerge = data.length;
+      data = mergeSimilarDanmaku(data, currentMergeWindow);
+      console.log(`[danmaku] 弹幕合并: ${beforeMerge} → ${data.length} (窗口: ${currentMergeWindow}秒)`);
+    }
 
     // 手动应用过滤器
     const filter = buildDanmakuFilter();
@@ -896,6 +1000,24 @@ function PlayPageClient() {
     console.log('[danmaku] 解析本地弹幕', { dataLen: data.length });
     if (!data.length) throw new Error('弹幕解析为空');
 
+    // 从localStorage读取最新的合并状态（避免闭包中的旧值）
+    let currentMergeEnabled = false;
+    let currentMergeWindow = 5;
+    try {
+      currentMergeEnabled = localStorage.getItem('danmaku_merge_enabled') === 'true';
+      const windowStr = localStorage.getItem('danmaku_merge_window');
+      currentMergeWindow = windowStr ? Number(windowStr) : 5;
+    } catch (e) {
+      console.warn('[danmaku] 读取合并设置失败', e);
+    }
+
+    // 应用弹幕合并（如果启用）
+    if (currentMergeEnabled) {
+      const beforeMerge = data.length;
+      data = mergeSimilarDanmaku(data, currentMergeWindow);
+      console.log(`[danmaku] 弹幕合并: ${beforeMerge} → ${data.length} (窗口: ${currentMergeWindow}秒)`);
+    }
+
     // 手动应用过滤器
     const filter = buildDanmakuFilter();
     const originalCount = data.length;
@@ -967,10 +1089,30 @@ function PlayPageClient() {
     try {
       const plugin = getDanmakuPlugin();
       if (plugin) {
+        let processedData = [...data];
+        
+        // 从localStorage读取最新的合并状态（避免闭包中的旧值）
+        let currentMergeEnabled = false;
+        let currentMergeWindow = 5;
+        try {
+          currentMergeEnabled = localStorage.getItem('danmaku_merge_enabled') === 'true';
+          const windowStr = localStorage.getItem('danmaku_merge_window');
+          currentMergeWindow = windowStr ? Number(windowStr) : 5;
+        } catch (e) {
+          console.warn('[danmaku] 读取合并设置失败', e);
+        }
+        
+        // 应用弹幕合并（如果启用）
+        if (currentMergeEnabled) {
+          const beforeMerge = processedData.length;
+          processedData = mergeSimilarDanmaku(processedData, currentMergeWindow);
+          console.log(`[danmaku] 重新加载时合并: ${beforeMerge} → ${processedData.length} (窗口: ${currentMergeWindow}秒)`);
+        }
+        
         // 手动应用过滤器,使用传入的参数或当前状态
         const filter = buildDanmakuFilter(keywords, limitPerSec);
-        const beforeCount = data.length;
-        const filteredData = data.filter(filter);
+        const beforeCount = processedData.length;
+        const filteredData = processedData.filter(filter);
         const afterCount = filteredData.length;
         const blockedCount = beforeCount - afterCount;
 
@@ -2314,6 +2456,28 @@ function PlayPageClient() {
             synchronousPlayback: true,
             visible: danmakuEnabled,
             offset: danmakuOffset,
+            // 自定义弹幕渲染函数，支持显示合并数量角标
+            beforeEmit: (danmu: any) => {
+              if (danmu.mergeCount && danmu.mergeCount > 1) {
+                // 计算字号增大：合并数越多字号越大
+                const baseFontSize = 25;
+                const sizeMultiplier = Math.min(1 + (danmu.mergeCount - 1) * 0.15, 2.5); // 最大2.5倍
+                const fontSize = Math.round(baseFontSize * sizeMultiplier);
+                
+                // 添加合并数量角标到文本末尾
+                const badge = `<span style="font-size: 0.7em; opacity: 0.8; margin-left: 4px; background: rgba(0,0,0,0.6); padding: 1px 4px; border-radius: 3px;">×${danmu.mergeCount}</span>`;
+                
+                return {
+                  ...danmu,
+                  text: `${danmu.text}${badge}`,
+                  style: {
+                    fontSize: `${fontSize}px`,
+                    fontWeight: danmu.mergeCount > 5 ? 'bold' : 'normal',
+                  },
+                };
+              }
+              return danmu;
+            },
           } as any),
         ],
         // HLS 支持配置
@@ -2508,6 +2672,8 @@ function PlayPageClient() {
                   <div class="art-danmaku-menu-item" data-action="offset-right-5" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">对轴 - 右5秒</div>
                   <div class="art-danmaku-menu-item" data-action="keywords" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">关键词屏蔽</div>
                   <div class="art-danmaku-menu-item" data-action="density" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">密度限制(条/秒)</div>
+                  <div class="art-danmaku-menu-item" data-action="toggle-merge" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">弹幕合并: ${danmakuMergeEnabled ? '已开启' : '已关闭'}</div>
+                  <div class="art-danmaku-menu-item" data-action="merge-window" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">合并窗口(秒)</div>
                   <div class="art-danmaku-menu-item" data-action="apply-filter" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">应用当前过滤规则</div>
                 </div>
               </div>
@@ -2535,6 +2701,18 @@ function PlayPageClient() {
                   clearTimeout(hideTimeout);
                   hideTimeout = null;
                 }
+                
+                // 更新菜单文本以反映当前状态（从localStorage读取最新值）
+                const mergeItem = menu.querySelector('[data-action="toggle-merge"]');
+                if (mergeItem) {
+                  try {
+                    const currentMergeState = localStorage.getItem('danmaku_merge_enabled') === 'true';
+                    mergeItem.textContent = `弹幕合并: ${currentMergeState ? '已开启' : '已关闭'}`;
+                  } catch (e) {
+                    console.warn('[DanmuTV] 读取合并状态失败', e);
+                  }
+                }
+                
                 menu.style.display = 'block';
               };
 
@@ -2690,6 +2868,66 @@ function PlayPageClient() {
                   case 'apply-filter':
                     await reloadDanmakuWithFilter();
                     break;
+
+                  case 'toggle-merge': {
+                    // 从localStorage读取最新状态，避免闭包中的旧值
+                    let currentState = false;
+                    try {
+                      currentState = localStorage.getItem('danmaku_merge_enabled') === 'true';
+                    } catch (e) {
+                      console.warn('[DanmuTV] 读取合并状态失败', e);
+                    }
+                    
+                    const newState = !currentState;
+                    setDanmakuMergeEnabled(newState);
+                    try {
+                      localStorage.setItem('danmaku_merge_enabled', String(newState));
+                    } catch (e) {
+                      console.error('[DanmuTV] 保存弹幕合并开关失败:', e);
+                    }
+                    
+                    // 重新加载弹幕以应用合并设置
+                    await reloadDanmakuWithFilter();
+                    showPlayerNotice(`弹幕合并已${newState ? '开启' : '关闭'}`, 1500);
+                    
+                    // 更新菜单文本
+                    const mergeItem = menu.querySelector('[data-action="toggle-merge"]');
+                    if (mergeItem) {
+                      mergeItem.textContent = `弹幕合并: ${newState ? '已开启' : '已关闭'}`;
+                    }
+                    break;
+                  }
+
+                  case 'merge-window': {
+                    const val = await showInputDialog(
+                      '合并窗口时长（秒）\n在此时间内的相同弹幕将被合并',
+                      String(danmakuMergeWindow)
+                    );
+                    if (val === null) break;
+                    
+                    const n = Math.max(1, Number(val) || 5);
+                    setDanmakuMergeWindow(n);
+                    try {
+                      localStorage.setItem('danmaku_merge_window', String(n));
+                    } catch (e) {
+                      console.error('[DanmuTV] 保存合并窗口失败:', e);
+                    }
+                    
+                    // 从localStorage读取最新的合并状态
+                    let currentMergeEnabled = false;
+                    try {
+                      currentMergeEnabled = localStorage.getItem('danmaku_merge_enabled') === 'true';
+                    } catch (e) {
+                      console.warn('[DanmuTV] 读取合并状态失败', e);
+                    }
+                    
+                    // 如果合并已开启，重新加载弹幕
+                    if (currentMergeEnabled) {
+                      await reloadDanmakuWithFilter();
+                      showPlayerNotice(`合并窗口已设置为 ${n} 秒`, 1500);
+                    }
+                    break;
+                  }
                 }
               });
             },
