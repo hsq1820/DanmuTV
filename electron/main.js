@@ -67,6 +67,7 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: false, // 禁用 web 安全检查以允许跨域请求
       // 使用默认 session (自动持久化到 userData)
       // partition 不设置,使用默认的持久化 session
     },
@@ -85,6 +86,28 @@ async function createWindow() {
     fs.mkdirSync(storagePath, { recursive: true });
     console.log('[DanmuTV] Created storage directory');
   }
+  
+  // 禁用 CORS 限制
+  session.webRequest.onBeforeSendHeaders((details, callback) => {
+    const { requestHeaders } = details;
+    // 移除 Origin 和 Referer,模拟服务器端请求
+    delete requestHeaders['Origin'];
+    delete requestHeaders['Referer'];
+    // 设置更通用的 User-Agent
+    requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    callback({ requestHeaders });
+  });
+
+  session.webRequest.onHeadersReceived((details, callback) => {
+    const { responseHeaders } = details;
+    // 添加允许跨域的响应头
+    if (responseHeaders) {
+      responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+      responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
+      responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+    }
+    callback({ responseHeaders });
+  });
   
   mainWindow.loadURL(url);
   

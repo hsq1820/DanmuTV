@@ -31,10 +31,13 @@ async function testSourceSpeed(source: VideoSource): Promise<SourceSpeedResult> 
     
     const response = await fetch(testUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        Accept: 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       },
       signal: controller.signal,
+      mode: 'cors', // 明确指定 CORS 模式
+      credentials: 'omit', // 不发送凭证
     });
     
     const endTime = performance.now();
@@ -42,14 +45,34 @@ async function testSourceSpeed(source: VideoSource): Promise<SourceSpeedResult> 
     
     const responseTime = Math.round(endTime - startTime);
     
+    // 检查响应是否成功
+    if (!response.ok) {
+      console.warn(`[${source.name}] HTTP ${response.status}: ${response.statusText}`);
+      return {
+        key: source.key,
+        name: source.name,
+        responseTime: -1,
+        isAvailable: false,
+      };
+    }
+    
     return {
       key: source.key,
       name: source.name,
-      responseTime: response.ok ? responseTime : -1,
-      isAvailable: response.ok,
+      responseTime: responseTime,
+      isAvailable: true,
     };
   } catch (error) {
-    // 请求失败或超时
+    // 详细的错误日志
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes('aborted')) {
+      console.warn(`[${source.name}] 超时 (>8s)`);
+    } else if (errorMsg.includes('Failed to fetch')) {
+      console.warn(`[${source.name}] 网络错误或CORS限制`);
+    } else {
+      console.warn(`[${source.name}] 错误: ${errorMsg}`);
+    }
+    
     return {
       key: source.key,
       name: source.name,
