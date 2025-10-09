@@ -4,7 +4,7 @@
 
 import { Database, Settings, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { DEFAULT_VIDEO_SOURCES } from '@/lib/default-video-sources';
@@ -1598,147 +1598,145 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               </div>
             ) : (
               videoSources.map((source) => (
-                <div
-                  key={source.key}
-                  className='p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors'
-                >
-                  <div className='flex items-start justify-between'>
-                    <div className='flex-1'>
-                      <div className='flex items-center gap-2 mb-2'>
-                        <span className='font-semibold text-gray-900 dark:text-gray-100'>
-                          {source.name}
-                        </span>
-                        <span className='text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'>
-                          {source.key}
-                        </span>
-                        {source.disabled && (
-                          <span className='text-xs px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'>
-                            已禁用
+                <React.Fragment key={source.key}>
+                  {/* 视频源卡片 */}
+                  <div className='p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors'>
+                    <div className='flex items-start justify-between'>
+                      <div className='flex-1'>
+                        <div className='flex items-center gap-2 mb-2'>
+                          <span className='font-semibold text-gray-900 dark:text-gray-100'>
+                            {source.name}
                           </span>
+                          <span className='text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'>
+                            {source.key}
+                          </span>
+                          {source.disabled && (
+                            <span className='text-xs px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'>
+                              已禁用
+                            </span>
+                          )}
+                        </div>
+                        <div className='text-sm text-gray-600 dark:text-gray-400 mb-1'>
+                          <span className='font-medium'>API: </span>
+                          <span className='break-all'>{source.api}</span>
+                        </div>
+                        {source.detail && (
+                          <div className='text-sm text-gray-600 dark:text-gray-400'>
+                            <span className='font-medium'>详情: </span>
+                            <span className='break-all'>{source.detail}</span>
+                          </div>
                         )}
                       </div>
-                      <div className='text-sm text-gray-600 dark:text-gray-400 mb-1'>
-                        <span className='font-medium'>API: </span>
-                        <span className='break-all'>{source.api}</span>
+                      <div className='flex gap-2 ml-4'>
+                        <button
+                          onClick={() => handleToggleSourceStatus(source.key)}
+                          className='px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors'
+                        >
+                          {source.disabled ? '启用' : '禁用'}
+                        </button>
+                        <button
+                          onClick={() => handleEditSource(source)}
+                          className='px-3 py-1 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors'
+                        >
+                          编辑
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`确定要删除视频源"${source.name}"吗?`)) {
+                              handleDeleteSource(source.key);
+                            }
+                          }}
+                          className='px-3 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors'
+                        >
+                          删除
+                        </button>
                       </div>
-                      {source.detail && (
-                        <div className='text-sm text-gray-600 dark:text-gray-400'>
-                          <span className='font-medium'>详情: </span>
-                          <span className='break-all'>{source.detail}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className='flex gap-2 ml-4'>
-                      <button
-                        onClick={() => handleToggleSourceStatus(source.key)}
-                        className='px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors'
-                      >
-                        {source.disabled ? '启用' : '禁用'}
-                      </button>
-                      <button
-                        onClick={() => handleEditSource(source)}
-                        className='px-3 py-1 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors'
-                      >
-                        编辑
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`确定要删除视频源"${source.name}"吗?`)) {
-                            handleDeleteSource(source.key);
-                          }
-                        }}
-                        className='px-3 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors'
-                      >
-                        删除
-                      </button>
                     </div>
                   </div>
-                </div>
+
+                  {/* 编辑表单 - 显示在被编辑的视频源下方 */}
+                  {editingSource && !isAddingSource && editingSource.key === source.key && (
+                    <div className='p-4 border-2 border-blue-500 dark:border-blue-600 rounded-lg bg-blue-50/50 dark:bg-blue-900/10'>
+                      <h4 className='font-semibold text-gray-900 dark:text-gray-100 mb-4'>
+                        ✏️ 编辑视频源
+                      </h4>
+                      <div className='space-y-3'>
+                        <div>
+                          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                            Key (唯一标识) <span className='text-red-500'>*</span>
+                          </label>
+                          <input
+                            type='text'
+                            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                            placeholder='例如: kkdy'
+                            value={editingSource.key}
+                            disabled
+                          />
+                          <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>Key不可修改</p>
+                        </div>
+                        <div>
+                          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                            名称 <span className='text-red-500'>*</span>
+                          </label>
+                          <input
+                            type='text'
+                            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                            placeholder='例如: 快看电影'
+                            value={editingSource.name}
+                            onChange={(e) =>
+                              setEditingSource({ ...editingSource, name: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                            API地址 <span className='text-red-500'>*</span>
+                          </label>
+                          <input
+                            type='text'
+                            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                            placeholder='例如: https://api.example.com/api.php/provide/vod'
+                            value={editingSource.api}
+                            onChange={(e) =>
+                              setEditingSource({ ...editingSource, api: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                            详情地址 (可选)
+                          </label>
+                          <input
+                            type='text'
+                            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                            placeholder='留空则使用API地址'
+                            value={editingSource.detail || ''}
+                            onChange={(e) =>
+                              setEditingSource({ ...editingSource, detail: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className='flex gap-2 pt-2'>
+                          <button
+                            onClick={handleSaveSource}
+                            className='flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 rounded-md transition-colors'
+                          >
+                            保存
+                          </button>
+                          <button
+                            onClick={handleCancelEditSource}
+                            className='flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors'
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </React.Fragment>
               ))
             )}
           </div>
-
-          {/* 编辑/添加表单 */}
-          {editingSource && (
-            <div className='mt-6 p-4 border-2 border-green-500 dark:border-green-600 rounded-lg bg-green-50/50 dark:bg-green-900/10'>
-              <h4 className='font-semibold text-gray-900 dark:text-gray-100 mb-4'>
-                {isAddingSource ? '添加新视频源' : '编辑视频源'}
-              </h4>
-              <div className='space-y-3'>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    Key (唯一标识) <span className='text-red-500'>*</span>
-                  </label>
-                  <input
-                    type='text'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-                    placeholder='例如: kkdy'
-                    value={editingSource.key}
-                    onChange={(e) =>
-                      setEditingSource({ ...editingSource, key: e.target.value })
-                    }
-                    disabled={!isAddingSource}
-                  />
-                </div>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    名称 <span className='text-red-500'>*</span>
-                  </label>
-                  <input
-                    type='text'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-                    placeholder='例如: 快看电影'
-                    value={editingSource.name}
-                    onChange={(e) =>
-                      setEditingSource({ ...editingSource, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    API地址 <span className='text-red-500'>*</span>
-                  </label>
-                  <input
-                    type='text'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-                    placeholder='例如: https://api.example.com/api.php/provide/vod'
-                    value={editingSource.api}
-                    onChange={(e) =>
-                      setEditingSource({ ...editingSource, api: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
-                    详情地址 (可选)
-                  </label>
-                  <input
-                    type='text'
-                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-                    placeholder='留空则使用API地址'
-                    value={editingSource.detail || ''}
-                    onChange={(e) =>
-                      setEditingSource({ ...editingSource, detail: e.target.value })
-                    }
-                  />
-                </div>
-                <div className='flex gap-2 pt-2'>
-                  <button
-                    onClick={handleSaveSource}
-                    className='flex-1 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 rounded-md transition-colors'
-                  >
-                    保存
-                  </button>
-                  <button
-                    onClick={handleCancelEditSource}
-                    className='flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors'
-                  >
-                    取消
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </>
