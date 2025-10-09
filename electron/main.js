@@ -1,8 +1,9 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const http = require('http');
 const next = require('next');
 const fs = require('fs');
+const os = require('os');
 
 const isDev = !app.isPackaged;
 let mainWindow;
@@ -57,6 +58,14 @@ async function startNextServer() {
 async function createWindow() {
   let url = isDev ? 'http://localhost:3000' : `http://localhost:${await startNextServer()}`;
   
+  // 确定 preload 脚本的正确路径
+  const preloadPath = isDev 
+    ? path.join(__dirname, 'preload.js')  // 开发模式：直接使用 electron 目录下的文件
+    : path.join(__dirname, 'preload.js'); // 生产模式：打包后也在 electron 目录
+  
+  console.log('[DanmuTV] Preload script path:', preloadPath);
+  console.log('[DanmuTV] Preload script exists:', fs.existsSync(preloadPath));
+  
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -68,6 +77,7 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false, // 禁用 web 安全检查以允许跨域请求
+      preload: preloadPath, // 使用正确的 preload 路径
       // 使用默认 session (自动持久化到 userData)
       // partition 不设置,使用默认的持久化 session
     },
@@ -121,6 +131,61 @@ async function createWindow() {
     return { action: 'deny' };
   });
 }
+
+// IPC 处理程序 - 选择保存目录
+ipcMain.handle('select-directory', async (event, defaultPath) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    defaultPath: defaultPath || path.join(os.homedir(), 'Desktop', 'danmu'),
+  });
+  
+  if (result.canceled) {
+    return null;
+  }
+  return result.filePaths[0];
+});
+
+// IPC 处理程序 - 保存文件
+ipcMain.handle('save-file', async (event, { filePath, data }) => {
+  try {
+    // 确保目录存在
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    // 写入文件
+    fs.writeFileSync(filePath, data);
+    return { success: true, filePath };
+  } catch (error) {
+    console.error('Save file error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC 处理程序 - 获取桌面路径（兼容 OneDrive）
+ipcMain.handle('get-desktop-path', async () => {
+  // 优先检查 OneDrive 桌面路径
+  const oneDriveDesktop = path.join(os.homedir(), 'OneDrive', '桌面');
+  if (fs.existsSync(oneDriveDesktop)) {
+    return oneDriveDesktop;
+  }
+  
+  // 检查英文 OneDrive Desktop
+  const oneDriveDesktopEn = path.join(os.homedir(), 'OneDrive', 'Desktop');
+  if (fs.existsSync(oneDriveDesktopEn)) {
+    return oneDriveDesktopEn;
+  }
+  
+  // 检查中文桌面
+  const desktopCn = path.join(os.homedir(), '桌面');
+  if (fs.existsSync(desktopCn)) {
+    return desktopCn;
+  }
+  
+  // 默认英文 Desktop
+  return path.join(os.homedir(), 'Desktop');
+});
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
