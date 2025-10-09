@@ -2,10 +2,21 @@
 
 'use client';
 
-import Artplayer from 'artplayer';
-// @ts-ignore
-import artplayerPluginDanmuku from 'artplayer-plugin-danmuku';
-import Hls from 'hls.js';
+// 添加全局错误处理,捕获模块加载时的错误
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    console.error('[Global Error]', event.error);
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('[Unhandled Rejection]', event.reason);
+  });
+}
+
+// 动态导入客户端依赖,避免服务器端编译错误
+// import Artplayer from 'artplayer';
+// import artplayerPluginDanmuku from 'artplayer-plugin-danmuku';
+// import Hls from 'hls.js';
+
 import {
   AlertCircle,
   CheckCircle2,
@@ -14,7 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
+import React, {
   type PointerEvent as ReactPointerEvent,
   Suspense,
   useEffect,
@@ -54,6 +65,30 @@ declare global {
 function PlayPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // -----------------------------------------------------------------------------
+  // 动态导入客户端库
+  // -----------------------------------------------------------------------------
+  const [Artplayer, setArtplayer] = useState<any>(null);
+  const [Hls, setHls] = useState<any>(null);
+  const [artplayerPluginDanmuku, setArtplayerPluginDanmuku] = useState<any>(null);
+
+  useEffect(() => {
+    // 动态导入客户端依赖,避免服务器端编译错误
+    Promise.all([
+      import('artplayer'),
+      import('hls.js'),
+      import('artplayer-plugin-danmuku'),
+    ]).then(([artplayerModule, hlsModule, danmukuModule]) => {
+      setArtplayer(() => artplayerModule.default);
+      setHls(() => hlsModule.default);
+      setArtplayerPluginDanmuku(() => danmukuModule.default);
+      console.log('[DynamicImport] 客户端库加载完成');
+    }).catch((err) => {
+      console.error('[DynamicImport] 加载失败:', err);
+      setError('播放器库加载失败,请刷新页面重试');
+    });
+  }, []);
 
   // -----------------------------------------------------------------------------
   // 状态变量（State）
@@ -441,6 +476,11 @@ function PlayPageClient() {
       const stored = localStorage.getItem(`danmaku_batch_${seriesKey}`);
       if (!stored) return null;
       const config = JSON.parse(stored) as BatchDanmakuConfig;
+      // 验证配置结构
+      if (!config || !Array.isArray(config.files)) {
+        console.warn('[danmaku] 批量弹幕配置格式无效');
+        return null;
+      }
       console.log('[danmaku] 读取到批量弹幕配置', { seriesKey, count: config.files.length });
       return config;
     } catch (e) {
@@ -768,6 +808,10 @@ function PlayPageClient() {
 
   // 解析工具：B站 XML
   const parseBilibiliXml = (xmlText: string): any[] => {
+    if (!xmlText || typeof xmlText !== 'string') {
+      console.warn('[danmaku] parseBilibiliXml 接收到无效输入', xmlText);
+      return [];
+    }
     try {
       const list: any[] = [];
       const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
@@ -785,6 +829,41 @@ function PlayPageClient() {
     } catch {
       return [];
     }
+  };
+
+  // 将数字转换为下标格式
+  const toSubscript = (num: number): string => {
+    const subscriptMap: { [key: string]: string } = {
+      '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+      '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'
+    };
+    return num.toString().split('').map(digit => subscriptMap[digit] || digit).join('');
+  };
+
+  // 强制清空所有弹幕DOM元素的通用函数(只删除弹幕内容,不删除控制UI)
+  const clearAllDanmakuDOM = (): number => {
+    if (!artRef.current) return 0;
+    
+    let cleared = 0;
+    
+    // 只查找弹幕渲染容器,不包括控制按钮
+    // artplayer-plugin-danmuku 的弹幕通常渲染在特定的容器内
+    const danmakuContainer = artRef.current.querySelector('.art-danmaku');
+    
+    if (danmakuContainer) {
+      // 只删除容器内的直接子元素(弹幕item),不删除容器本身和控制UI
+      const items = danmakuContainer.querySelectorAll('div[style*="position"]');
+      items.forEach(item => {
+        // 确保是弹幕元素(有定位样式且有文本内容)
+        const style = item.getAttribute('style') || '';
+        if (style.includes('position') && item.textContent && item.textContent.trim()) {
+          item.remove();
+          cleared++;
+        }
+      });
+    }
+    
+    return cleared;
   };
 
   // 弹幕合并：合并一段时间窗口内完全相同的弹幕
@@ -817,20 +896,28 @@ function PlayPageClient() {
           const newCount = (target.mergeCount || 1) + 1;
           target.mergeCount = newCount;
           
-          // 计算字号增大：合并数越多字号越大
-          const baseFontSize = 25;
-          const sizeMultiplier = Math.min(1 + (newCount - 1) * 0.15, 2.5); // 最大2.5倍
-          const fontSize = Math.round(baseFontSize * sizeMultiplier);
+          // 更新显示文本（添加下标角标）
+          target.text = `${currentText} ${toSubscript(newCount)}`;
           
-          // 更新显示文本（添加角标）
-          target.text = `${currentText} ×${newCount}`;
-          
-          // 设置字号和样式
-          target.size = fontSize;
-          target.fontSize = fontSize;
-          if (newCount > 5) {
-            target.border = true; // 使用边框突出显示
+          // 根据合并数量设置字号,但保持原始颜色不变
+          let mergedFontSize = 25;
+          if (newCount <= 3) {
+            mergedFontSize = 25;
+          } else if (newCount <= 10) {
+            mergedFontSize = 35;
+          } else if (newCount <= 20) {
+            mergedFontSize = 45;
+          } else {
+            mergedFontSize = 55;
           }
+          
+          // 添加自定义样式对象,只设置字号
+          target.style = {
+            fontSize: `${mergedFontSize}px`,
+            fontWeight: newCount > 3 ? 'bold' : 'normal',
+          };
+          
+          console.log(`[danmaku] 合并弹幕: "${currentText}" 计数=${newCount}, 字号=${mergedFontSize}px`);
           
           foundMergeTarget = true;
           break;
@@ -853,6 +940,10 @@ function PlayPageClient() {
 
   // 解析工具：ASS（极简实现，仅取起始时间和文本）
   const parseASSToDanmaku = (assText: string): any[] => {
+    if (!assText || typeof assText !== 'string') {
+      console.warn('[danmaku] parseASSToDanmaku 接收到无效输入', assText);
+      return [];
+    }
     const lines = assText.split(/\r?\n/);
     const res: any[] = [];
     const timeToSec = (t: string) => {
@@ -880,6 +971,10 @@ function PlayPageClient() {
 
   // 解析入口：根据内容识别 XML/ASS/JSON
   const parseDanmakuText = (text: string): any[] => {
+    if (!text || typeof text !== 'string') {
+      console.warn('[danmaku] parseDanmakuText 接收到无效输入', text);
+      return [];
+    }
     const t = text.trim();
     if (!t) return [];
     if (t.startsWith('<')) {
@@ -923,7 +1018,7 @@ function PlayPageClient() {
     }
 
     // 应用弹幕合并（如果启用）
-    if (currentMergeEnabled) {
+    if (currentMergeEnabled && data && Array.isArray(data) && data.length > 0) {
       const beforeMerge = data.length;
       data = mergeSimilarDanmaku(data, currentMergeWindow);
       console.log(`[danmaku] 弹幕合并: ${beforeMerge} → ${data.length} (窗口: ${currentMergeWindow}秒)`);
@@ -943,7 +1038,19 @@ function PlayPageClient() {
 
     const plugin = getDanmakuPlugin();
     if (plugin && typeof plugin.load === 'function') {
-      // 不在这里清空，交由调用方（自动加载useEffect）负责清空
+      // 加载前先清空旧弹幕DOM
+      try {
+        await plugin.load([]);
+        const cleared = clearAllDanmakuDOM();
+        if (cleared > 0) {
+          console.log(`[danmaku] 加载前清除了 ${cleared} 个旧DOM元素`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch (e) {
+        console.warn('[danmaku] 清空旧弹幕失败', e);
+      }
+      
+      // 加载新弹幕
       try {
         await plugin.load(data);
         console.log('[danmaku] plugin.load(data) 成功', data.length);
@@ -1012,7 +1119,7 @@ function PlayPageClient() {
     }
 
     // 应用弹幕合并（如果启用）
-    if (currentMergeEnabled) {
+    if (currentMergeEnabled && data && Array.isArray(data) && data.length > 0) {
       const beforeMerge = data.length;
       data = mergeSimilarDanmaku(data, currentMergeWindow);
       console.log(`[danmaku] 弹幕合并: ${beforeMerge} → ${data.length} (窗口: ${currentMergeWindow}秒)`);
@@ -1032,7 +1139,19 @@ function PlayPageClient() {
 
     const plugin = getDanmakuPlugin();
     if (plugin && typeof plugin.load === 'function') {
-      // 不在这里清空，交由调用方负责清空
+      // 加载前先清空旧弹幕DOM
+      try {
+        await plugin.load([]);
+        const cleared = clearAllDanmakuDOM();
+        if (cleared > 0) {
+          console.log(`[danmaku] 加载前清除了 ${cleared} 个旧DOM元素`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch (e) {
+        console.warn('[danmaku] 清空旧弹幕失败', e);
+      }
+      
+      // 加载新弹幕
       try {
         await plugin.load(data);
         console.log('[danmaku] plugin.load(data) 成功', data.length);
@@ -1085,29 +1204,29 @@ function PlayPageClient() {
   // 重新以当前过滤规则加载上一次弹幕源
   const reloadDanmakuWithFilter = async (keywords?: string, limitPerSec?: number): Promise<string> => {
     const data = lastDanmakuDataRef.current || pendingDanmakuDataRef.current;
-    if (!data || !data.length) return '无弹幕源';
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      console.warn('[danmaku] 无可用弹幕数据,跳过重载');
+      return '无弹幕源';
+    }
+    
+    console.log(`[danmaku] ===== 开始重新加载弹幕 =====`);
+    console.log(`[danmaku] 原始数据条数: ${data.length}`);
+    
+    // 暂停视频,防止在清空和加载期间弹幕继续滚动
+    const wasPlaying = artPlayerRef.current && !artPlayerRef.current.paused;
+    const currentTime = artPlayerRef.current?.currentTime || 0;
+    
+    if (wasPlaying && artPlayerRef.current) {
+      artPlayerRef.current.pause();
+      console.log('[danmaku] 暂停视频以重新加载弹幕');
+    }
+    
     try {
       const plugin = getDanmakuPlugin();
       if (plugin) {
-        let processedData = [...data];
-        
-        // 从localStorage读取最新的合并状态（避免闭包中的旧值）
-        let currentMergeEnabled = false;
-        let currentMergeWindow = 5;
-        try {
-          currentMergeEnabled = localStorage.getItem('danmaku_merge_enabled') === 'true';
-          const windowStr = localStorage.getItem('danmaku_merge_window');
-          currentMergeWindow = windowStr ? Number(windowStr) : 5;
-        } catch (e) {
-          console.warn('[danmaku] 读取合并设置失败', e);
-        }
-        
-        // 应用弹幕合并（如果启用）
-        if (currentMergeEnabled) {
-          const beforeMerge = processedData.length;
-          processedData = mergeSimilarDanmaku(processedData, currentMergeWindow);
-          console.log(`[danmaku] 重新加载时合并: ${beforeMerge} → ${processedData.length} (窗口: ${currentMergeWindow}秒)`);
-        }
+        // 直接使用 lastDanmakuDataRef 中的数据(已经在初始加载时应用了合并)
+        // 这里只需要应用新的过滤规则
+        const processedData = [...data];
         
         // 手动应用过滤器,使用传入的参数或当前状态
         const filter = buildDanmakuFilter(keywords, limitPerSec);
@@ -1124,35 +1243,68 @@ function PlayPageClient() {
           密度限制: limitPerSec ?? danmakuLimitPerSec,
         });
 
-        // 先清空之前的弹幕（直接重置内部数据）
+        // 清空并重新加载弹幕
         try {
-          // 尝试多种清空方法
-          if (plugin.danmus) {
-            plugin.danmus = [];
-          }
-          if (plugin.dan) {
-            plugin.dan = [];
-          }
-          // 调用 hide 方法（如果存在）
-          if (typeof plugin.hide === 'function') {
-            plugin.hide();
-          }
-          // 最后尝试 load 空数组
+          console.log('[danmaku] 清空旧弹幕...');
+          
+          // 新策略:强制清空所有弹幕DOM元素
+          // 步骤1: 先加载空数组清空插件数据
           await plugin.load([]);
-          console.log('[danmaku] 清空之前的弹幕');
-        } catch (e) {
-          console.warn('[danmaku] 清空弹幕失败', e);
+          console.log('[danmaku] 插件数据已清空');
+          
+          // 步骤2: 使用通用函数清除所有弹幕DOM
+          const cleared = clearAllDanmakuDOM();
+          if (cleared > 0) {
+            console.log(`[danmaku] 强制清除了 ${cleared} 个DOM元素`);
+          }
+          
+          // 步骤3: 等待确保清除完成
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          console.log('[danmaku] 清空完成');
+        } catch (e: any) {
+          console.error('[danmaku] 清空失败:', e?.message || e);
         }
 
         // 加载过滤后的数据
+        console.log('[danmaku] 开始加载新弹幕数据:', filteredData.length, '条');
         await plugin.load(filteredData);
-        if (typeof plugin.update === 'function') plugin.update();
+        
+        // 显示弹幕
+        if (typeof plugin.show === 'function') {
+          plugin.show();
+          console.log('[danmaku] 显示弹幕');
+        }
+        
+        // 更新插件
+        if (typeof plugin.update === 'function') {
+          plugin.update();
+          console.log('[danmaku] 更新插件');
+        }
 
         const msg =
           blockedCount > 0
             ? `弹幕过滤已应用：保留 ${afterCount} 条，屏蔽 ${blockedCount} 条`
             : `弹幕过滤已应用：共 ${afterCount} 条`;
         showPlayerNotice(msg, 2500);
+        
+        // 恢复播放状态
+        if (wasPlaying && artPlayerRef.current) {
+          // 确保时间没有变化
+          if (Math.abs(artPlayerRef.current.currentTime - currentTime) > 0.5) {
+            artPlayerRef.current.currentTime = currentTime;
+          }
+          // 延迟恢复播放,确保弹幕加载完成
+          setTimeout(() => {
+            if (artPlayerRef.current) {
+              artPlayerRef.current.play().catch((e: any) => console.warn('[danmaku] 恢复播放失败', e));
+              console.log('[danmaku] 恢复视频播放');
+            }
+          }, 200);
+        }
+        
+        console.log('[danmaku] ===== 弹幕重新加载完成 =====');
+        
         return '已应用并重载';
       }
       pendingDanmakuDataRef.current = data;
@@ -1161,6 +1313,12 @@ function PlayPageClient() {
       console.error('重载弹幕失败', e);
       const msg = e?.message || '重载失败';
       triggerGlobalError(msg);
+      
+      // 即使失败也尝试恢复播放
+      if (wasPlaying && artPlayerRef.current) {
+        artPlayerRef.current.play().catch(() => {});
+      }
+      
       return '失败';
     }
   };
@@ -1696,35 +1854,44 @@ function PlayPageClient() {
     }
   };
 
-  class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
-    constructor(config: any) {
-      super(config);
-      const load = this.load.bind(this);
-      this.load = function (context: any, config: any, callbacks: any) {
-        // 拦截manifest和level请求
-        if (
-          (context as any).type === 'manifest' ||
-          (context as any).type === 'level'
-        ) {
-          const onSuccess = callbacks.onSuccess;
-          callbacks.onSuccess = function (
-            response: any,
-            stats: any,
-            context: any
-          ) {
-            // 如果是m3u8文件，处理内容以移除广告分段
-            if (response.data && typeof response.data === 'string') {
-              // 过滤掉广告段 - 实现更精确的广告过滤逻辑
-              response.data = filterAdsFromM3U8(response.data);
-            }
-            return onSuccess(response, stats, context, null);
-          };
-        }
-        // 执行原始load方法
-        load(context, config, callbacks);
-      };
+  // 创建自定义HLS加载器的工厂函数（需要Hls已加载）
+  const createCustomHlsLoader = (HlsClass: any) => {
+    if (!HlsClass || !HlsClass.DefaultConfig) {
+      return null;
     }
-  }
+    
+    class CustomHlsJsLoader extends HlsClass.DefaultConfig.loader {
+      constructor(config: any) {
+        super(config);
+        const load = this.load.bind(this);
+        this.load = function (context: any, config: any, callbacks: any) {
+          // 拦截manifest和level请求
+          if (
+            (context as any).type === 'manifest' ||
+            (context as any).type === 'level'
+          ) {
+            const onSuccess = callbacks.onSuccess;
+            callbacks.onSuccess = function (
+              response: any,
+              stats: any,
+              context: any
+            ) {
+              // 如果是m3u8文件，处理内容以移除广告分段
+              if (response.data && typeof response.data === 'string') {
+                // 过滤掉广告段 - 实现更精确的广告过滤逻辑
+                response.data = filterAdsFromM3U8(response.data);
+              }
+              return onSuccess(response, stats, context, null);
+            };
+          }
+          // 执行原始load方法
+          load(context, config, callbacks);
+        };
+      }
+    }
+    
+    return CustomHlsJsLoader;
+  };
 
   // 当集数索引变化时自动更新视频地址
   useEffect(() => {
@@ -2081,6 +2248,12 @@ function PlayPageClient() {
       if (artPlayerRef.current && artPlayerRef.current.paused) {
         saveCurrentPlayProgress();
       }
+      
+      // 清空弹幕数据引用,避免上一集的数据残留
+      lastDanmakuDataRef.current = null;
+      pendingDanmakuDataRef.current = null;
+      console.log('[danmaku] 切换剧集,已清空弹幕数据');
+      
       setCurrentEpisodeIndex(episodeNumber);
     }
   };
@@ -2092,6 +2265,12 @@ function PlayPageClient() {
       if (artPlayerRef.current && !artPlayerRef.current.paused) {
         saveCurrentPlayProgress();
       }
+      
+      // 清空弹幕数据引用
+      lastDanmakuDataRef.current = null;
+      pendingDanmakuDataRef.current = null;
+      console.log('[danmaku] 切换到上一集,已清空弹幕数据');
+      
       setCurrentEpisodeIndex(idx - 1);
     }
   };
@@ -2103,6 +2282,12 @@ function PlayPageClient() {
       if (artPlayerRef.current && !artPlayerRef.current.paused) {
         saveCurrentPlayProgress();
       }
+      
+      // 清空弹幕数据引用
+      lastDanmakuDataRef.current = null;
+      pendingDanmakuDataRef.current = null;
+      console.log('[danmaku] 切换到下一集,已清空弹幕数据');
+      
       setCurrentEpisodeIndex(idx + 1);
     }
   };
@@ -2351,6 +2536,7 @@ function PlayPageClient() {
     if (
       !Artplayer ||
       !Hls ||
+      !artplayerPluginDanmuku ||
       !videoUrl ||
       loading ||
       currentEpisodeIndex === null ||
@@ -2456,28 +2642,7 @@ function PlayPageClient() {
             synchronousPlayback: true,
             visible: danmakuEnabled,
             offset: danmakuOffset,
-            // 自定义弹幕渲染函数，支持显示合并数量角标
-            beforeEmit: (danmu: any) => {
-              if (danmu.mergeCount && danmu.mergeCount > 1) {
-                // 计算字号增大：合并数越多字号越大
-                const baseFontSize = 25;
-                const sizeMultiplier = Math.min(1 + (danmu.mergeCount - 1) * 0.15, 2.5); // 最大2.5倍
-                const fontSize = Math.round(baseFontSize * sizeMultiplier);
-                
-                // 添加合并数量角标到文本末尾
-                const badge = `<span style="font-size: 0.7em; opacity: 0.8; margin-left: 4px; background: rgba(0,0,0,0.6); padding: 1px 4px; border-radius: 3px;">×${danmu.mergeCount}</span>`;
-                
-                return {
-                  ...danmu,
-                  text: `${danmu.text}${badge}`,
-                  style: {
-                    fontSize: `${fontSize}px`,
-                    fontWeight: danmu.mergeCount > 5 ? 'bold' : 'normal',
-                  },
-                };
-              }
-              return danmu;
-            },
+            useWorker: true, // 启用 Web Worker 提高性能
           } as any),
         ],
         // HLS 支持配置
@@ -2491,6 +2656,12 @@ function PlayPageClient() {
             if (video.hls) {
               video.hls.destroy();
             }
+            
+            // 创建自定义加载器
+            const CustomLoader = blockAdEnabledRef.current 
+              ? createCustomHlsLoader(Hls) 
+              : null;
+            
             const hls = new Hls({
               debug: false, // 关闭日志
               enableWorker: true, // WebWorker 解码，降低主线程压力
@@ -2502,9 +2673,7 @@ function PlayPageClient() {
               maxBufferSize: 60 * 1000 * 1000, // 约 60MB，超出后触发清理
 
               /* 自定义loader */
-              loader: blockAdEnabledRef.current
-                ? CustomHlsJsLoader
-                : Hls.DefaultConfig.loader,
+              loader: CustomLoader || Hls.DefaultConfig.loader,
             });
 
             hls.loadSource(url);
@@ -2870,7 +3039,7 @@ function PlayPageClient() {
                     break;
 
                   case 'toggle-merge': {
-                    // 从localStorage读取最新状态，避免闭包中的旧值
+                    // 从localStorage读取当前状态
                     let currentState = false;
                     try {
                       currentState = localStorage.getItem('danmaku_merge_enabled') === 'true';
@@ -2879,21 +3048,20 @@ function PlayPageClient() {
                     }
                     
                     const newState = !currentState;
-                    setDanmakuMergeEnabled(newState);
+                    
                     try {
+                      // 保存新状态到localStorage
                       localStorage.setItem('danmaku_merge_enabled', String(newState));
+                      console.log('[danmaku] 弹幕合并状态已切换:', currentState, '->', newState);
+                      
+                      // 刷新页面以应用新状态
+                      showPlayerNotice(`弹幕合并已${newState ? '开启' : '关闭'}，正在刷新页面...`, 1500);
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 500);
                     } catch (e) {
                       console.error('[DanmuTV] 保存弹幕合并开关失败:', e);
-                    }
-                    
-                    // 重新加载弹幕以应用合并设置
-                    await reloadDanmakuWithFilter();
-                    showPlayerNotice(`弹幕合并已${newState ? '开启' : '关闭'}`, 1500);
-                    
-                    // 更新菜单文本
-                    const mergeItem = menu.querySelector('[data-action="toggle-merge"]');
-                    if (mergeItem) {
-                      mergeItem.textContent = `弹幕合并: ${newState ? '已开启' : '已关闭'}`;
+                      showPlayerNotice('切换失败', 1500);
                     }
                     break;
                   }
@@ -2906,25 +3074,25 @@ function PlayPageClient() {
                     if (val === null) break;
                     
                     const n = Math.max(1, Number(val) || 5);
-                    setDanmakuMergeWindow(n);
                     try {
                       localStorage.setItem('danmaku_merge_window', String(n));
+                      console.log('[danmaku] 合并窗口已设置为:', n, '秒');
+                      
+                      // 检查合并是否开启
+                      const mergeEnabled = localStorage.getItem('danmaku_merge_enabled') === 'true';
+                      if (mergeEnabled) {
+                        // 如果合并已开启,刷新页面以应用新窗口
+                        showPlayerNotice(`合并窗口已设置为 ${n} 秒，正在刷新页面...`, 1500);
+                        setTimeout(() => {
+                          window.location.reload();
+                        }, 500);
+                      } else {
+                        // 如果合并未开启,仅提示设置成功
+                        showPlayerNotice(`合并窗口已设置为 ${n} 秒`, 1500);
+                      }
                     } catch (e) {
                       console.error('[DanmuTV] 保存合并窗口失败:', e);
-                    }
-                    
-                    // 从localStorage读取最新的合并状态
-                    let currentMergeEnabled = false;
-                    try {
-                      currentMergeEnabled = localStorage.getItem('danmaku_merge_enabled') === 'true';
-                    } catch (e) {
-                      console.warn('[DanmuTV] 读取合并状态失败', e);
-                    }
-                    
-                    // 如果合并已开启，重新加载弹幕
-                    if (currentMergeEnabled) {
-                      await reloadDanmakuWithFilter();
-                      showPlayerNotice(`合并窗口已设置为 ${n} 秒`, 1500);
+                      showPlayerNotice('设置失败', 1500);
                     }
                     break;
                   }
@@ -2938,6 +3106,9 @@ function PlayPageClient() {
       // 监听播放器事件
       artPlayerRef.current.on('ready', () => {
         setError(null);
+        
+        console.log('[danmaku] 播放器已准备就绪,弹幕合并功能已启用');
+        
         // 挂到 window.art 方便调试
         try {
           // @ts-ignore
@@ -3155,7 +3326,7 @@ function PlayPageClient() {
       console.error('创建播放器失败:', err);
       setError('播放器初始化失败');
     }
-  }, [Artplayer, Hls, videoUrl, loading, blockAdEnabled]);
+  }, [Artplayer, Hls, artplayerPluginDanmuku, videoUrl, loading, blockAdEnabled]);
 
   // 当组件卸载时清理定时器
   useEffect(() => {
@@ -3238,7 +3409,7 @@ function PlayPageClient() {
       try {
         // 优先检查批量弹幕配置（多文件上传）
         const batchConfig = loadBatchDanmakuConfig();
-        if (batchConfig && batchConfig.files.length > 0) {
+        if (batchConfig && Array.isArray(batchConfig.files) && batchConfig.files.length > 0) {
           const currentEp = getCurrentEpisode();
           const fileIndex = currentEp - 1; // 集数从1开始，数组从0开始
           
@@ -4065,10 +4236,54 @@ const FavoriteIcon = ({ filled }: { filled: boolean }) => {
   );
 };
 
+// 错误边界组件
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: any }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('[ErrorBoundary] Caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-gray-900">
+          <div className="rounded-lg bg-red-900/20 p-8 text-center">
+            <h2 className="mb-4 text-2xl font-bold text-red-500">页面加载失败</h2>
+            <p className="mb-4 text-gray-300">
+              {this.state.error?.message || '未知错误'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            >
+              刷新页面
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function PlayPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <PlayPageClient />
-    </Suspense>
+    <ErrorBoundary>
+      <Suspense fallback={<div>Loading...</div>}>
+        <PlayPageClient />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

@@ -1,7 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { showToast } from './GlobalToast';
+
+// 全局标记，防止多个组件实例同时执行测速
+let isSpeedTestRunning = false;
 
 interface VideoSource {
   key: string;
@@ -85,8 +88,9 @@ async function testSourceSpeed(source: VideoSource): Promise<SourceSpeedResult> 
 
 /**
  * 测试所有视频源的速度并保留最快的前20个
+ * 导出此函数以便手动调用
  */
-async function speedTestAllSources(): Promise<void> {
+export async function speedTestAllSources(): Promise<void> {
   if (typeof window === 'undefined') {
     return;
   }
@@ -193,10 +197,61 @@ async function speedTestAllSources(): Promise<void> {
  * 在应用启动时自动对所有视频源进行测速,保留最快的前20个
  */
 export default function SourceAvailabilityChecker() {
+  const hasRunRef = useRef(false);
+  
   useEffect(() => {
-    // 在组件挂载时执行一次测速
+    const SPEED_TEST_KEY = 'source_speed_test_timestamp';
+    const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24小时有效期
+    
     const performSpeedTest = async () => {
-      await speedTestAllSources();
+      // 防止重复执行（组件级别）
+      if (hasRunRef.current) {
+        console.log('[SourceAvailabilityChecker] 本组件已执行过，跳过');
+        return;
+      }
+      
+      // 防止并发执行（全局级别）
+      if (isSpeedTestRunning) {
+        console.log('[SourceAvailabilityChecker] 测速正在进行中，跳过');
+        return;
+      }
+      
+      if (typeof window !== 'undefined') {
+        try {
+          const lastTestTime = localStorage.getItem(SPEED_TEST_KEY);
+          if (lastTestTime) {
+            const timeSinceLastTest = Date.now() - Number(lastTestTime);
+            if (timeSinceLastTest < CACHE_DURATION) {
+              console.log('[SourceAvailabilityChecker] 测速结果仍在有效期内，跳过（剩余', 
+                Math.round((CACHE_DURATION - timeSinceLastTest) / 1000 / 60), '分钟）');
+              hasRunRef.current = true;
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('[SourceAvailabilityChecker] 读取测速缓存失败', e);
+        }
+      }
+      
+      // 标记为已执行
+      hasRunRef.current = true;
+      isSpeedTestRunning = true;
+      
+      try {
+        await speedTestAllSources();
+        
+        // 保存测速完成时间
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(SPEED_TEST_KEY, String(Date.now()));
+          } catch (e) {
+            console.warn('[SourceAvailabilityChecker] 保存测速时间失败', e);
+          }
+        }
+      } finally {
+        // 无论成功失败都要解除锁定
+        isSpeedTestRunning = false;
+      }
     };
     
     performSpeedTest();

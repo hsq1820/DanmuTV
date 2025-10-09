@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom';
 import { DEFAULT_VIDEO_SOURCES } from '@/lib/default-video-sources';
 import { checkForUpdates, CURRENT_VERSION, UpdateStatus } from '@/lib/version';
 import { showToast } from './GlobalToast';
+import { speedTestAllSources } from './SourceAvailabilityChecker';
 
 interface AuthInfo {
   username?: string;
@@ -85,6 +86,7 @@ export const UserMenu: React.FC = () => {
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
   const [editingSource, setEditingSource] = useState<VideoSource | null>(null);
   const [isAddingSource, setIsAddingSource] = useState(false);
+  const [isSpeedTesting, setIsSpeedTesting] = useState(false); // 测速状态
 
   // 版本检查相关状态
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
@@ -483,6 +485,36 @@ export const UserMenu: React.FC = () => {
         'success',
         6000
       );
+    }
+  };
+
+  // 手动触发视频源测速
+  const handleManualSpeedTest = async () => {
+    if (isSpeedTesting) {
+      showToast('测速正在进行中，请稍候...', 'info', 2000);
+      return;
+    }
+
+    if (!confirm('确定要开始视频源测速吗?\n\n这将测试所有未禁用的视频源,并保留速度最快的前20个。测速过程可能需要几秒钟。')) {
+      return;
+    }
+
+    setIsSpeedTesting(true);
+    showToast('开始视频源测速，请稍候...', 'info', 3000);
+
+    try {
+      // 清除之前的测速时间戳，强制重新测速
+      localStorage.removeItem('source_speed_test_timestamp');
+      
+      // 执行测速
+      await speedTestAllSources();
+      
+      showToast('视频源测速完成！已保留速度最快的前20个源。', 'success', 5000);
+    } catch (error) {
+      console.error('视频源测速失败:', error);
+      showToast('视频源测速失败，请稍后重试', 'error', 5000);
+    } finally {
+      setIsSpeedTesting(false);
     }
   };
 
@@ -1422,11 +1454,52 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             </button>
           </div>
 
+          {/* 添加/编辑/管理按钮区域 */}
+          {!editingSource && (
+            <div className='space-y-2 mb-6'>
+              <button
+                onClick={handleAddSource}
+                className='w-full px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 rounded-md transition-colors'
+              >
+                + 添加新视频源
+              </button>
+              <button
+                onClick={handleManualSpeedTest}
+                disabled={isSpeedTesting}
+                className={`w-full px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${
+                  isSpeedTesting
+                    ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
+                    : 'bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600'
+                }`}
+              >
+                {isSpeedTesting ? '⏳ 测速中...' : '⚡ 手动优选视频源'}
+              </button>
+              <button
+                onClick={handleEnableAllAvailableSources}
+                className='w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 rounded-md transition-colors'
+              >
+                🚀 启用所有可用视频源
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm(`确定要重置为默认视频源吗?\n\n这将清除所有自定义配置,恢复 ${DEFAULT_VIDEO_SOURCES.length} 个默认视频源。`)) {
+                    setVideoSources(DEFAULT_VIDEO_SOURCES);
+                    localStorage.setItem('danmutv_video_sources', JSON.stringify(DEFAULT_VIDEO_SOURCES));
+                    showToast('已重置为默认视频源', 'success', 3000);
+                  }
+                }}
+                className='w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors'
+              >
+                🔄 重置为默认视频源
+              </button>
+            </div>
+          )}
+
           {/* 视频源列表 */}
           <div className='space-y-3 mb-4'>
             {videoSources.length === 0 ? (
               <div className='text-center py-8 text-gray-500 dark:text-gray-400'>
-                暂无视频源,点击下方按钮添加
+                暂无视频源,点击上方按钮添加
               </div>
             ) : (
               videoSources.map((source) => (
@@ -1572,43 +1645,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             </div>
           )}
 
-          {/* 添加按钮 */}
-          {!editingSource && (
-            <div className='space-y-2'>
-              <button
-                onClick={handleAddSource}
-                className='w-full px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 rounded-md transition-colors'
-              >
-                + 添加新视频源
-              </button>
-              <button
-                onClick={handleEnableAllAvailableSources}
-                className='w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 rounded-md transition-colors'
-              >
-                🚀 启用所有可用视频源
-              </button>
-              <button
-                onClick={() => {
-                  if (confirm(`确定要重置为默认视频源吗?\n\n这将清除所有自定义配置,恢复 ${DEFAULT_VIDEO_SOURCES.length} 个默认视频源。`)) {
-                    setVideoSources(DEFAULT_VIDEO_SOURCES);
-                    localStorage.setItem('danmutv_video_sources', JSON.stringify(DEFAULT_VIDEO_SOURCES));
-                    alert('已重置为默认视频源');
-                  }
-                }}
-                className='w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors'
-              >
-                🔄 重置为默认视频源
-              </button>
-            </div>
-          )}
-
           {/* 说明文字 */}
           <div className='mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md'>
             <p className='text-xs text-blue-800 dark:text-blue-300'>
               <strong>说明:</strong> 视频源配置保存在浏览器本地存储中。Key是视频源的唯一标识,添加后不可修改。API地址需要支持标准的采集接口格式。首次使用已自动加载 {DEFAULT_VIDEO_SOURCES.length} 个默认视频源。
             </p>
             <p className='text-xs text-blue-800 dark:text-blue-300 mt-2'>
-              <strong>提示:</strong> 应用启动时会自动测速并保留最快的前20个视频源。点击"启用所有可用视频源"可以清除速度限制,使用所有可用的视频源(可能会降低搜索速度)。
+              <strong>提示:</strong> 应用启动时会自动测速并保留最快的前20个视频源。点击"⚡ 手动优选视频源"可以立即重新测速。点击"🚀 启用所有可用视频源"可以清除速度限制,使用所有可用的视频源(可能会降低搜索速度)。
             </p>
           </div>
         </div>

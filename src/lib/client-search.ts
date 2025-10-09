@@ -35,7 +35,8 @@ async function searchFromSource(
 
     const data = await response.json();
     
-    if (!data.list || !Array.isArray(data.list)) {
+    if (!data || !data.list || !Array.isArray(data.list)) {
+      console.warn(`搜索结果格式无效 [${source.name}]`);
       return [];
     }
 
@@ -43,10 +44,18 @@ async function searchFromSource(
     return data.list.map((item: any) => {
       // 解析播放地址为episodes数组
       const episodes: string[] = [];
-      if (item.vod_play_url) {
-        const playUrls = item.vod_play_url.split('$$$')[0]; // 取第一个播放源
-        const episodeList = playUrls.split('#').filter((ep: string) => ep.trim());
-        episodes.push(...episodeList.map((ep: string) => ep.split('$')[1] || ep));
+      if (item.vod_play_url && typeof item.vod_play_url === 'string') {
+        try {
+          const playUrls = item.vod_play_url.split('$$$')[0]; // 取第一个播放源
+          if (playUrls) {
+            const episodeList = playUrls.split('#').filter((ep: string) => ep && ep.trim());
+            if (Array.isArray(episodeList)) {
+              episodes.push(...episodeList.map((ep: string) => ep.split('$')[1] || ep));
+            }
+          }
+        } catch (e) {
+          console.warn(`解析播放地址失败 [${source.name}]:`, e);
+        }
       }
       
       return {
