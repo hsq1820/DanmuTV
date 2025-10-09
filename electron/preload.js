@@ -10,4 +10,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // 获取桌面路径
   getDesktopPath: () => ipcRenderer.invoke('get-desktop-path'),
+  
+  // 全屏相关
+  setFullScreen: (flag) => ipcRenderer.invoke('set-fullscreen', flag),
+  isFullScreen: () => ipcRenderer.invoke('is-fullscreen'),
+  onFullScreenChange: (callback) => {
+    ipcRenderer.on('fullscreen-changed', (event, isFullScreen) => callback(isFullScreen));
+  },
 });

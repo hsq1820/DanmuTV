@@ -2378,7 +2378,20 @@ function PlayPageClient() {
     // f 键 = 切换全屏
     if (e.key === 'f' || e.key === 'F') {
       if (artPlayerRef.current) {
-        artPlayerRef.current.fullscreen = !artPlayerRef.current.fullscreen;
+        // 在 Electron 环境下使用系统级全屏
+        if (typeof window !== 'undefined' && (window as any).electronAPI) {
+          (async () => {
+            try {
+              const isFullScreen = await (window as any).electronAPI.isFullScreen();
+              await (window as any).electronAPI.setFullScreen(!isFullScreen);
+            } catch (err) {
+              console.error('切换全屏失败:', err);
+            }
+          })();
+        } else {
+          // 非 Electron 环境使用网页全屏
+          artPlayerRef.current.fullscreen = !artPlayerRef.current.fullscreen;
+        }
         e.preventDefault();
       }
     }
@@ -2738,7 +2751,7 @@ function PlayPageClient() {
             name: '跳过片头片尾',
             html: '跳过片头片尾',
             switch: skipConfigRef.current.enable,
-            onSwitch: function (item) {
+            onSwitch: function (item: any) {
               const newConfig = {
                 ...skipConfigRef.current,
                 enable: !item.switch,
@@ -3116,6 +3129,37 @@ function PlayPageClient() {
         } catch (e) {
           // 忽略 window.art 挂载失败
         }
+        
+        // Electron 环境下，使用系统级全屏替代网页全屏
+        if (typeof window !== 'undefined' && (window as any).electronAPI) {
+          const fullscreenBtn = artPlayerRef.current?.template?.$fullscreen;
+          if (fullscreenBtn) {
+            // 移除原有的点击事件监听器
+            const newFullscreenBtn = fullscreenBtn.cloneNode(true);
+            fullscreenBtn.parentNode?.replaceChild(newFullscreenBtn, fullscreenBtn);
+            
+            // 添加新的点击事件
+            newFullscreenBtn.addEventListener('click', async () => {
+              try {
+                const isFullScreen = await (window as any).electronAPI.isFullScreen();
+                await (window as any).electronAPI.setFullScreen(!isFullScreen);
+              } catch (err) {
+                console.error('切换全屏失败:', err);
+              }
+            });
+          }
+          
+          // 监听 Electron 全屏状态变化，同步到播放器 UI
+          if ((window as any).electronAPI.onFullScreenChange) {
+            (window as any).electronAPI.onFullScreenChange((isFullScreen: boolean) => {
+              // 更新播放器的全屏状态显示（不触发实际全屏切换）
+              if (artPlayerRef.current) {
+                artPlayerRef.current.fullscreen = isFullScreen;
+              }
+            });
+          }
+        }
+        
         // 插件 ready 后兜底重试 pending 弹幕
         if (pendingDanmakuDataRef.current) {
           const plugin = getDanmakuPlugin();

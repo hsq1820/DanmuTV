@@ -73,6 +73,7 @@ async function createWindow() {
     minHeight: 600,
     title: 'DanmuTV',
     backgroundColor: '#1a1a1a',
+    autoHideMenuBar: true, // 自动隐藏菜单栏（按 Alt 键可显示）
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -83,6 +84,11 @@ async function createWindow() {
     },
     icon: path.join(__dirname, '../public/logo.png'),
   });
+  
+  // 完全移除菜单栏（生产环境）
+  if (!isDev) {
+    mainWindow.setMenu(null);
+  }
   
   // 获取默认 session
   const session = mainWindow.webContents.session;
@@ -120,6 +126,15 @@ async function createWindow() {
   });
   
   mainWindow.loadURL(url);
+  
+  // 监听全屏状态变化
+  mainWindow.on('enter-full-screen', () => {
+    mainWindow.webContents.send('fullscreen-changed', true);
+  });
+  
+  mainWindow.on('leave-full-screen', () => {
+    mainWindow.webContents.send('fullscreen-changed', false);
+  });
   
   // 仅在开发模式下打开开发者工具
   if (isDev) {
@@ -185,6 +200,23 @@ ipcMain.handle('get-desktop-path', async () => {
   
   // 默认英文 Desktop
   return path.join(os.homedir(), 'Desktop');
+});
+
+// IPC 处理程序 - 设置全屏
+ipcMain.handle('set-fullscreen', async (event, flag) => {
+  if (mainWindow) {
+    mainWindow.setFullScreen(flag);
+    return mainWindow.isFullScreen();
+  }
+  return false;
+});
+
+// IPC 处理程序 - 获取全屏状态
+ipcMain.handle('is-fullscreen', async () => {
+  if (mainWindow) {
+    return mainWindow.isFullScreen();
+  }
+  return false;
 });
 
 app.whenReady().then(createWindow);
