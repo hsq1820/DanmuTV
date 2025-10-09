@@ -9,6 +9,7 @@ import { GlobalErrorIndicator } from '../components/GlobalErrorIndicator';
 import { SiteProvider } from '../components/SiteProvider';
 import { ThemeProvider } from '../components/ThemeProvider';
 import SourceAvailabilityChecker from '../components/SourceAvailabilityChecker';
+import GlobalToast from '../components/GlobalToast';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -78,6 +79,7 @@ export default async function RootLayout({
             <SourceAvailabilityChecker />
             {children}
             <GlobalErrorIndicator />
+            <GlobalToast />
           </SiteProvider>
         </ThemeProvider>
       </body>
