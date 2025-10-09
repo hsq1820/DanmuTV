@@ -1456,29 +1456,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
           {/* 添加/编辑/管理按钮区域 */}
           {!editingSource && (
-            <div className='space-y-2 mb-6'>
+            <div className='space-y-2.5 mb-4'>
               <button
                 onClick={handleAddSource}
-                className='w-full px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 rounded-md transition-colors'
+                className='w-full px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-sm hover:shadow-md'
               >
-                + 添加新视频源
+                <span className='text-lg'>+</span>
+                <span>添加新视频源</span>
               </button>
               <button
                 onClick={handleManualSpeedTest}
                 disabled={isSpeedTesting}
-                className={`w-full px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${
+                className={`w-full px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-sm ${
                   isSpeedTesting
-                    ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
-                    : 'bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600'
+                    ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white hover:shadow-md'
                 }`}
               >
-                {isSpeedTesting ? '⏳ 测速中...' : '⚡ 手动优选视频源'}
+                <span className='text-lg'>{isSpeedTesting ? '⏳' : '⚡'}</span>
+                <span>{isSpeedTesting ? '测速中...' : '手动优选视频源'}</span>
               </button>
               <button
                 onClick={handleEnableAllAvailableSources}
-                className='w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 rounded-md transition-colors'
+                className='w-full px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-sm hover:shadow-md'
               >
-                🚀 启用所有可用视频源
+                <span className='text-lg'>🚀</span>
+                <span>启用所有可用视频源</span>
               </button>
               <button
                 onClick={() => {
@@ -1488,12 +1491,104 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     showToast('已重置为默认视频源', 'success', 3000);
                   }
                 }}
-                className='w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors'
+                className='w-full px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 dark:from-gray-600 dark:to-gray-700 dark:hover:from-gray-700 dark:hover:to-gray-800 text-white shadow-sm hover:shadow-md'
               >
-                🔄 重置为默认视频源
+                <span className='text-lg'>🔄</span>
+                <span>重置为默认视频源</span>
               </button>
             </div>
           )}
+
+          {/* 添加表单 - 显示在按钮下方、说明上方 */}
+          {editingSource && isAddingSource && (
+            <div className='mb-4 p-4 border-2 border-green-500 dark:border-green-600 rounded-lg bg-green-50/50 dark:bg-green-900/10'>
+              <h4 className='font-semibold text-gray-900 dark:text-gray-100 mb-4'>
+                ➕ 添加新视频源
+              </h4>
+              <div className='space-y-3'>
+                <div>
+                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                    Key (唯一标识) <span className='text-red-500'>*</span>
+                  </label>
+                  <input
+                    type='text'
+                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                    placeholder='例如: kkdy'
+                    value={editingSource.key}
+                    onChange={(e) =>
+                      setEditingSource({ ...editingSource, key: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                    名称 <span className='text-red-500'>*</span>
+                  </label>
+                  <input
+                    type='text'
+                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                    placeholder='例如: 快看电影'
+                    value={editingSource.name}
+                    onChange={(e) =>
+                      setEditingSource({ ...editingSource, name: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                    API地址 <span className='text-red-500'>*</span>
+                  </label>
+                  <input
+                    type='text'
+                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                    placeholder='例如: https://api.example.com/api.php/provide/vod'
+                    value={editingSource.api}
+                    onChange={(e) =>
+                      setEditingSource({ ...editingSource, api: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                    详情地址 (可选)
+                  </label>
+                  <input
+                    type='text'
+                    className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                    placeholder='留空则使用API地址'
+                    value={editingSource.detail || ''}
+                    onChange={(e) =>
+                      setEditingSource({ ...editingSource, detail: e.target.value })
+                    }
+                  />
+                </div>
+                <div className='flex gap-2 pt-2'>
+                  <button
+                    onClick={handleSaveSource}
+                    className='flex-1 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 rounded-md transition-colors'
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={handleCancelEditSource}
+                    className='flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors'
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 说明文字 */}
+          <div className='mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg'>
+            <p className='text-xs text-blue-800 dark:text-blue-300 leading-relaxed'>
+              <strong>💡 说明：</strong>视频源配置保存在浏览器本地存储中。Key是视频源的唯一标识,添加后不可修改。API地址需要支持标准的采集接口格式。首次使用已自动加载 {DEFAULT_VIDEO_SOURCES.length} 个默认视频源。
+            </p>
+            <p className='text-xs text-blue-800 dark:text-blue-300 mt-2 leading-relaxed'>
+              <strong>⚙️ 功能说明：</strong>应用启动时会自动测速并保留最快的前20个视频源。点击"⚡ 手动优选视频源"可以立即重新测速。点击"🚀 启用所有可用视频源"可以清除速度限制,使用所有可用的视频源(可能会降低搜索速度)。
+            </p>
+          </div>
 
           {/* 视频源列表 */}
           <div className='space-y-3 mb-4'>
@@ -1644,16 +1739,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               </div>
             </div>
           )}
-
-          {/* 说明文字 */}
-          <div className='mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md'>
-            <p className='text-xs text-blue-800 dark:text-blue-300'>
-              <strong>说明:</strong> 视频源配置保存在浏览器本地存储中。Key是视频源的唯一标识,添加后不可修改。API地址需要支持标准的采集接口格式。首次使用已自动加载 {DEFAULT_VIDEO_SOURCES.length} 个默认视频源。
-            </p>
-            <p className='text-xs text-blue-800 dark:text-blue-300 mt-2'>
-              <strong>提示:</strong> 应用启动时会自动测速并保留最快的前20个视频源。点击"⚡ 手动优选视频源"可以立即重新测速。点击"🚀 启用所有可用视频源"可以清除速度限制,使用所有可用的视频源(可能会降低搜索速度)。
-            </p>
-          </div>
         </div>
       </div>
     </>
