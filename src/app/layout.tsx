@@ -8,6 +8,7 @@ import './globals.css';
 import { GlobalErrorIndicator } from '../components/GlobalErrorIndicator';
 import { SiteProvider } from '../components/SiteProvider';
 import { ThemeProvider } from '../components/ThemeProvider';
+import SourceAvailabilityChecker from '../components/SourceAvailabilityChecker';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -74,6 +75,7 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <SiteProvider siteName={siteName} announcement={announcement}>
+            <SourceAvailabilityChecker />
             {children}
             <GlobalErrorIndicator />
           </SiteProvider>

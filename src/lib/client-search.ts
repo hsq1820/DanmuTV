@@ -11,6 +11,101 @@ interface VideoSource {
 }
 
 /**
+ * 检查单个视频源的有效性
+ * @param source 视频源配置
+ * @returns Promise<boolean> 返回该源是否可访问
+ */
+async function checkSourceAvailability(source: VideoSource): Promise<boolean> {
+  try {
+    // 使用一个简单的请求来测试视频源的可用性
+    const testUrl = `${source.api}?ac=videolist&pg=1&t=1`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒超时
+    
+    const response = await fetch(testUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'application/json',
+      },
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    // 只要能返回响应就认为源可用
+    return response.ok;
+  } catch (error) {
+    console.warn(`视频源 [${source.name}] 无法访问:`, error);
+    return false;
+  }
+}
+
+/**
+ * 检查所有视频源的有效性
+ * @returns Promise<Set<string>> 返回不可用的视频源key集合
+ */
+export async function checkAllSourcesAvailability(): Promise<Set<string>> {
+  if (typeof window === 'undefined') {
+    return new Set();
+  }
+
+  // 从 localStorage 读取视频源配置
+  const savedSources = localStorage.getItem('danmutv_video_sources');
+  
+  if (!savedSources) {
+    console.warn('未找到视频源配置');
+    return new Set();
+  }
+
+  let sources: VideoSource[];
+  try {
+    sources = JSON.parse(savedSources);
+  } catch (e) {
+    console.error('解析视频源配置失败:', e);
+    return new Set();
+  }
+
+  // 只检查启用的视频源
+  const enabledSources = sources.filter(s => !s.disabled);
+  
+  if (enabledSources.length === 0) {
+    return new Set();
+  }
+
+  console.log(`开始检查 ${enabledSources.length} 个视频源的有效性...`);
+
+  // 并发检查所有视频源
+  const checkPromises = enabledSources.map(async (source) => {
+    const isAvailable = await checkSourceAvailability(source);
+    return { key: source.key, name: source.name, isAvailable };
+  });
+
+  try {
+    const results = await Promise.all(checkPromises);
+    
+    const blockedSources = new Set<string>();
+    let availableCount = 0;
+    
+    results.forEach(({ key, name, isAvailable }) => {
+      if (!isAvailable) {
+        blockedSources.add(key);
+        console.warn(`视频源 [${name}] (${key}) 已被屏蔽`);
+      } else {
+        availableCount++;
+      }
+    });
+    
+    console.log(`视频源检查完成: ${availableCount} 个可用, ${blockedSources.size} 个不可用`);
+    
+    return blockedSources;
+  } catch (error) {
+    console.error('检查视频源有效性失败:', error);
+    return new Set();
+  }
+}
+
+/**
  * 从单个视频源搜索
  */
 async function searchFromSource(
@@ -91,11 +186,22 @@ export async function searchFromAllSources(query: string): Promise<SearchResult[
     return [];
   }
 
-  // 只使用启用的视频源
-  const enabledSources = sources.filter(s => !s.disabled);
+  // 获取被临时屏蔽的视频源列表
+  const blockedSourcesStr = localStorage.getItem('danmutv_blocked_sources');
+  let blockedSources: string[] = [];
+  if (blockedSourcesStr) {
+    try {
+      blockedSources = JSON.parse(blockedSourcesStr);
+    } catch (e) {
+      console.error('解析屏蔽源列表失败:', e);
+    }
+  }
+
+  // 只使用启用且未被屏蔽的视频源
+  const enabledSources = sources.filter(s => !s.disabled && !blockedSources.includes(s.key));
   
   if (enabledSources.length === 0) {
-    console.warn('没有启用的视频源');
+    console.warn('没有可用的视频源');
     return [];
   }
 
@@ -144,6 +250,20 @@ export async function getVideoDetail(
   } catch (e) {
     console.error('解析视频源配置失败:', e);
     return null;
+  }
+
+  // 检查该视频源是否被临时屏蔽
+  const blockedSourcesStr = localStorage.getItem('danmutv_blocked_sources');
+  if (blockedSourcesStr) {
+    try {
+      const blockedSources: string[] = JSON.parse(blockedSourcesStr);
+      if (blockedSources.includes(sourceKey)) {
+        console.warn(`视频源 ${sourceKey} 已被临时屏蔽，跳过获取详情`);
+        return null;
+      }
+    } catch (e) {
+      console.error('解析屏蔽源列表失败:', e);
+    }
   }
 
   // 找到对应的视频源
