@@ -1,6 +1,6 @@
 {
   "name": "danmutv",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "基于 MoonTV 二次开发的支持弹幕的桌面影视播放器",
   "main": "electron/main.js",
   "scripts": {
