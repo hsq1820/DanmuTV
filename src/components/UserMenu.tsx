@@ -150,7 +150,7 @@ export const UserMenu: React.FC = () => {
       const savedDoubanDataSource = localStorage.getItem('doubanDataSource');
       const defaultDoubanDataSourceType =
         (window as any).RUNTIME_CONFIG?.DOUBAN_PROXY_TYPE ||
-        'cmliussss-cdn-tencent';
+        'cors-proxy-zwei'; // 默认使用 Cors Proxy By Zwei
       if (savedDoubanDataSource !== null) {
         setDoubanDataSource(savedDoubanDataSource);
       } else if (defaultDoubanDataSourceType) {
@@ -162,7 +162,7 @@ export const UserMenu: React.FC = () => {
       );
       const defaultDoubanImageProxyType =
         (window as any).RUNTIME_CONFIG?.DOUBAN_IMAGE_PROXY_TYPE ||
-        'cmliussss-cdn-tencent';
+        'direct'; // 默认直连
       if (savedDoubanImageProxyType !== null) {
         setDoubanImageProxyType(savedDoubanImageProxyType);
       } else if (defaultDoubanImageProxyType) {
@@ -385,6 +385,8 @@ export const UserMenu: React.FC = () => {
     setDoubanProxyUrl(defaultDoubanProxy);
     setEnableImageProxy(!!defaultImageProxy);
     setImageProxyUrl(defaultImageProxy);
+    setDoubanDataSource('cors-proxy-zwei'); // 重置为 Cors Proxy By Zwei
+    setDoubanImageProxyType('direct'); // 重置为直连
 
     if (typeof window !== 'undefined') {
       localStorage.setItem('defaultAggregateSearch', JSON.stringify(true));
@@ -395,6 +397,8 @@ export const UserMenu: React.FC = () => {
         JSON.stringify(!!defaultImageProxy)
       );
       localStorage.setItem('imageProxyUrl', defaultImageProxy);
+      localStorage.setItem('doubanDataSource', 'cors-proxy-zwei');
+      localStorage.setItem('doubanImageProxyType', 'direct');
     }
   };
 
