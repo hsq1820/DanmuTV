@@ -10,16 +10,24 @@ interface VideoSource {
   disabled?: boolean;
 }
 
+interface SourceSpeedResult {
+  key: string;
+  name: string;
+  responseTime: number; // 响应时间(毫秒), -1 表示失败
+  isAvailable: boolean;
+}
+
 /**
- * 检查单个视频源的有效性
+ * 测试单个视频源的响应速度
  */
-async function checkSourceAvailability(source: VideoSource): Promise<boolean> {
+async function testSourceSpeed(source: VideoSource): Promise<SourceSpeedResult> {
   try {
-    // 使用一个简单的请求来测试视频源的可用性
     const testUrl = `${source.api}?ac=videolist&pg=1&t=1`;
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒超时
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
+    
+    const startTime = performance.now();
     
     const response = await fetch(testUrl, {
       headers: {
@@ -29,20 +37,32 @@ async function checkSourceAvailability(source: VideoSource): Promise<boolean> {
       signal: controller.signal,
     });
     
+    const endTime = performance.now();
     clearTimeout(timeoutId);
     
-    // 只要能返回响应就认为源可用
-    return response.ok;
+    const responseTime = Math.round(endTime - startTime);
+    
+    return {
+      key: source.key,
+      name: source.name,
+      responseTime: response.ok ? responseTime : -1,
+      isAvailable: response.ok,
+    };
   } catch (error) {
-    // 静默失败,不打印过多日志
-    return false;
+    // 请求失败或超时
+    return {
+      key: source.key,
+      name: source.name,
+      responseTime: -1,
+      isAvailable: false,
+    };
   }
 }
 
 /**
- * 检查所有视频源的有效性并将不可用的源保存到 localStorage
+ * 测试所有视频源的速度并保留最快的前20个
  */
-async function checkAllSourcesAvailability(): Promise<void> {
+async function speedTestAllSources(): Promise<void> {
   if (typeof window === 'undefined') {
     return;
   }
@@ -63,62 +83,94 @@ async function checkAllSourcesAvailability(): Promise<void> {
     return;
   }
 
-  // 只检查启用的视频源
-  const enabledSources = sources.filter(s => !s.disabled);
+  // 只测试未被用户手动禁用的视频源
+  const testSources = sources.filter(s => !s.disabled);
   
-  if (enabledSources.length === 0) {
+  if (testSources.length === 0) {
+    console.warn('没有可测试的视频源');
     return;
   }
 
-  console.log(`🔍 开始检查 ${enabledSources.length} 个视频源的有效性...`);
+  console.log(`� 开始对 ${testSources.length} 个视频源进行测速...`);
+  const startTime = Date.now();
 
-  // 并发检查所有视频源
-  const checkPromises = enabledSources.map(async (source) => {
-    const isAvailable = await checkSourceAvailability(source);
-    return { key: source.key, name: source.name, isAvailable };
-  });
+  // 并发测试所有视频源
+  const speedTestPromises = testSources.map(source => testSourceSpeed(source));
 
   try {
-    const results = await Promise.all(checkPromises);
+    const results = await Promise.all(speedTestPromises);
     
-    const blockedSourceKeys: string[] = [];
-    let availableCount = 0;
+    // 过滤出可用的视频源
+    const availableSources = results.filter(r => r.isAvailable);
+    const unavailableSources = results.filter(r => !r.isAvailable);
     
-    results.forEach(({ key, name, isAvailable }) => {
-      if (!isAvailable) {
-        blockedSourceKeys.push(key);
-        console.warn(`❌ 视频源 [${name}] (${key}) 无法访问，已临时屏蔽`);
-      } else {
-        availableCount++;
-      }
-    });
+    if (availableSources.length === 0) {
+      console.error('❌ 所有视频源均不可用!');
+      localStorage.removeItem('danmutv_blocked_sources');
+      return;
+    }
     
-    // 将不可用的源保存到 localStorage，仅对本次会话有效
+    // 按响应时间排序(从快到慢)
+    availableSources.sort((a, b) => a.responseTime - b.responseTime);
+    
+    // 保留最快的前20个
+    const topCount = Math.min(20, availableSources.length);
+    const fastestSources = availableSources.slice(0, topCount);
+    const slowSources = availableSources.slice(topCount);
+    
+    // 将速度慢的源和不可用的源加入屏蔽列表
+    const blockedSourceKeys = [
+      ...slowSources.map(s => s.key),
+      ...unavailableSources.map(s => s.key)
+    ];
+    
+    // 保存屏蔽列表
     if (blockedSourceKeys.length > 0) {
       localStorage.setItem('danmutv_blocked_sources', JSON.stringify(blockedSourceKeys));
-      console.log(`✅ 视频源检查完成: ${availableCount} 个可用, ${blockedSourceKeys.length} 个不可用（已临时屏蔽）`);
     } else {
-      // 清除之前的屏蔽记录
       localStorage.removeItem('danmutv_blocked_sources');
-      console.log(`✅ 视频源检查完成: 所有 ${availableCount} 个视频源均可用`);
     }
+    
+    // 输出测速结果
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`\n✅ 视频源测速完成 (耗时 ${totalTime}s):`);
+    console.log(`   📊 总计: ${testSources.length} 个`);
+    console.log(`   ✓ 可用: ${availableSources.length} 个`);
+    console.log(`   ✗ 不可用: ${unavailableSources.length} 个`);
+    console.log(`   🚀 已启用: ${fastestSources.length} 个 (最快的前${topCount}个)`);
+    console.log(`   🔒 已屏蔽: ${blockedSourceKeys.length} 个 (速度慢或不可用)\n`);
+    
+    // 输出最快的前10个源的详细信息
+    console.log('🏆 速度最快的视频源 TOP 10:');
+    fastestSources.slice(0, 10).forEach((source, index) => {
+      console.log(`   ${index + 1}. [${source.name}] ${source.responseTime}ms`);
+    });
+    
+    // 输出不可用的源(如果有)
+    if (unavailableSources.length > 0) {
+      console.log(`\n⚠️ 不可用的视频源 (${unavailableSources.length}个):`);
+      unavailableSources.forEach(source => {
+        console.log(`   ❌ [${source.name}] (${source.key})`);
+      });
+    }
+    
   } catch (error) {
-    console.error('检查视频源有效性失败:', error);
+    console.error('视频源测速失败:', error);
   }
 }
 
 /**
- * 视频源有效性检查组件
- * 在应用启动时自动检查所有视频源的可用性
+ * 视频源测速组件
+ * 在应用启动时自动对所有视频源进行测速,保留最快的前20个
  */
 export default function SourceAvailabilityChecker() {
   useEffect(() => {
-    // 在组件挂载时执行一次检查
-    const checkSources = async () => {
-      await checkAllSourcesAvailability();
+    // 在组件挂载时执行一次测速
+    const performSpeedTest = async () => {
+      await speedTestAllSources();
     };
     
-    checkSources();
+    performSpeedTest();
   }, []); // 空依赖数组，只在挂载时执行一次
 
   // 这个组件不渲染任何内容
