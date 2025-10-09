@@ -162,6 +162,8 @@ function PlayPageClient() {
   const [danmakuOffset, setDanmakuOffset] = useState(0); // 秒，可正可负
   const danmakuPluginRef = useRef<any>(null);
   const danmakuFileRef = useRef<File | null>(null); // 存储本地弹幕文件
+  const danmakuFilesRef = useRef<File[]>([]); // 存储批量上传的弹幕文件
+  const [danmakuFilesList, setDanmakuFilesList] = useState<File[]>([]); // 用于UI显示
   const isFirstLoadRef = useRef(true); // 标记是否是首次加载
   // 弹幕高级加载面板
   const [danmakuPanelOpen, setDanmakuPanelOpen] = useState(false);
@@ -368,6 +370,59 @@ function PlayPageClient() {
       return history;
     } catch (e) {
       console.warn('[danmaku] 读取加载历史失败', e);
+      return null;
+    }
+  };
+
+  // 保存批量弹幕配置(用于多文件上传)
+  interface BatchDanmakuConfig {
+    files: { name: string; content: string }[];
+    timestamp: number;
+  }
+  
+  const saveBatchDanmakuConfig = async (files: File[]) => {
+    try {
+      const seriesKey = getSeriesKey();
+      if (!seriesKey) {
+        console.log('[danmaku] 无法确定剧集标识，不保存批量配置');
+        return;
+      }
+      
+      // 读取所有文件内容
+      const fileContents = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          content: await file.text(),
+        }))
+      );
+      
+      const config: BatchDanmakuConfig = {
+        files: fileContents,
+        timestamp: Date.now(),
+      };
+      
+      localStorage.setItem(
+        `danmaku_batch_${seriesKey}`,
+        JSON.stringify(config)
+      );
+      console.log('[danmaku] 已保存批量弹幕配置', { seriesKey, count: files.length });
+    } catch (e) {
+      console.warn('[danmaku] 保存批量弹幕配置失败', e);
+    }
+  };
+  
+  // 读取批量弹幕配置
+  const loadBatchDanmakuConfig = (): BatchDanmakuConfig | null => {
+    try {
+      const seriesKey = getSeriesKey();
+      if (!seriesKey) return null;
+      const stored = localStorage.getItem(`danmaku_batch_${seriesKey}`);
+      if (!stored) return null;
+      const config = JSON.parse(stored) as BatchDanmakuConfig;
+      console.log('[danmaku] 读取到批量弹幕配置', { seriesKey, count: config.files.length });
+      return config;
+    } catch (e) {
+      console.warn('[danmaku] 读取批量弹幕配置失败', e);
       return null;
     }
   };
@@ -2943,7 +2998,39 @@ function PlayPageClient() {
       }
 
       try {
-        // 优先检查剧集配置（适用于同一剧的不同集）
+        // 优先检查批量弹幕配置（多文件上传）
+        const batchConfig = loadBatchDanmakuConfig();
+        if (batchConfig && batchConfig.files.length > 0) {
+          const currentEp = getCurrentEpisode();
+          const fileIndex = currentEp - 1; // 集数从1开始，数组从0开始
+          
+          if (fileIndex >= 0 && fileIndex < batchConfig.files.length) {
+            const fileData = batchConfig.files[fileIndex];
+            console.log('[danmaku] 检测到批量弹幕配置，自动加载', {
+              currentEp,
+              fileIndex,
+              fileName: fileData.name,
+              totalFiles: batchConfig.files.length,
+            });
+            
+            try {
+              await loadDanmakuFromText(fileData.content);
+              setDanmakuEnabled(true);
+              console.log('[danmaku] 批量弹幕自动加载成功');
+              return;
+            } catch (e) {
+              console.warn('[danmaku] 批量弹幕加载失败，尝试其他方式', e);
+            }
+          } else {
+            console.log('[danmaku] 当前集数超出批量弹幕范围', {
+              currentEp,
+              fileIndex,
+              totalFiles: batchConfig.files.length,
+            });
+          }
+        }
+        
+        // 其次检查剧集配置（适用于同一剧的不同集）
         const seriesConfig = loadSeriesDanmakuConfig();
         if (seriesConfig) {
           const currentEp = getCurrentEpisode();
@@ -3470,22 +3557,92 @@ function PlayPageClient() {
                   />
                 </div>
               ) : (
-                <div className='flex items-center gap-3'>
-                  <label className='w-24 text-sm text-gray-600 dark:text-gray-400'>
-                    文件
-                  </label>
-                  <input
-                    type='file'
-                    accept='.xml,.XML,.ass,.ASS,.json,.JSON'
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        danmakuFileRef.current = file;
-                        setDanmakuInput(file.name);
-                      }
-                    }}
-                    className='flex-1 text-sm text-gray-600 dark:text-gray-400'
-                  />
+                <div className='flex flex-col gap-2'>
+                  <div className='flex items-center gap-3'>
+                    <label className='w-24 text-sm text-gray-600 dark:text-gray-400'>
+                      文件
+                    </label>
+                    <input
+                      type='file'
+                      accept='.xml,.XML,.ass,.ASS,.json,.JSON'
+                      multiple
+                      onChange={(e) => {
+                        const files = e.target.files;
+                        if (files && files.length > 0) {
+                          const fileArray = Array.from(files);
+                          if (fileArray.length === 1) {
+                            // 单文件：保持原逻辑
+                            danmakuFileRef.current = fileArray[0];
+                            danmakuFilesRef.current = [];
+                            setDanmakuFilesList([]);
+                            setDanmakuInput(fileArray[0].name);
+                          } else {
+                            // 多文件：批量模式 - 智能排序
+                            const extractEpisodeNumber = (filename: string): number => {
+                              // 尝试多种模式提取集数
+                              // 模式1: 第X集、第X话、第X期
+                              let match = filename.match(/第(\d+)[集话期]/);
+                              if (match) return parseInt(match[1]);
+                              
+                              // 模式2: 正片_数字 (如：正片_01)
+                              match = filename.match(/正片[_\s](\d+)/);
+                              if (match) return parseInt(match[1]);
+                              
+                              // 模式3: EP数字、ep数字、E数字 (如：EP01, E01)
+                              match = filename.match(/[Ee][Pp]?(\d+)/);
+                              if (match) return parseInt(match[1]);
+                              
+                              // 模式4: 纯数字开头 (如：01、001)
+                              match = filename.match(/^(\d+)/);
+                              if (match) return parseInt(match[1]);
+                              
+                              // 模式5: 文件名中的任意连续数字 (如：包含"12"的文件)
+                              match = filename.match(/(\d+)/);
+                              if (match) return parseInt(match[1]);
+                              
+                              // 无法提取，返回一个大数使其排在最后
+                              return 999999;
+                            };
+                            
+                            const sortedFiles = fileArray.sort((a, b) => {
+                              const numA = extractEpisodeNumber(a.name);
+                              const numB = extractEpisodeNumber(b.name);
+                              
+                              // 如果集数不同，按集数排序
+                              if (numA !== numB) {
+                                return numA - numB;
+                              }
+                              
+                              // 集数相同，按文件名字母顺序排序
+                              return a.name.localeCompare(b.name, 'zh-CN');
+                            });
+                            
+                            danmakuFileRef.current = null;
+                            danmakuFilesRef.current = sortedFiles;
+                            setDanmakuFilesList(sortedFiles);
+                            setDanmakuInput(`已选择 ${fileArray.length} 个文件`);
+                          }
+                        }
+                      }}
+                      className='flex-1 text-sm text-gray-600 dark:text-gray-400'
+                    />
+                  </div>
+                  {danmakuFilesList.length > 0 && (
+                    <div className='ml-24 pl-2 border-l-2 border-blue-400 dark:border-blue-600'>
+                      <div className='text-xs font-medium text-blue-600 dark:text-blue-400 mb-1'>
+                        将从第1集开始匹配 ({danmakuFilesList.length} 个文件):
+                      </div>
+                      <div className='text-xs text-gray-500 dark:text-gray-400 space-y-0.5 max-h-32 overflow-y-auto'>
+                        {danmakuFilesList.map((f, idx) => (
+                          <div key={idx} className='flex items-center gap-2'>
+                            <span className='text-blue-500 dark:text-blue-400 font-mono'>第{idx + 1}集</span>
+                            <span className='text-gray-600 dark:text-gray-300'>→</span>
+                            <span className='truncate'>{f.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -3546,6 +3703,22 @@ function PlayPageClient() {
 
                       // 处理本地文件上传
                       if (danmakuSourceType === 'local') {
+                        // 批量模式
+                        if (danmakuFilesRef.current.length > 1) {
+                          const files = danmakuFilesRef.current;
+                          await saveBatchDanmakuConfig(files);
+                          
+                          // 加载第一个文件(对应第1集)
+                          const firstFile = files[0];
+                          const text = await firstFile.text();
+                          await loadDanmakuFromText(text);
+                          
+                          setDanmakuMsg(`已加载批量弹幕 (1/${files.length}): ${firstFile.name}`);
+                          setTimeout(() => setDanmakuPanelOpen(false), 1000);
+                          return;
+                        }
+                        
+                        // 单文件模式
                         const file = danmakuFileRef.current;
                         if (!file) throw new Error('请选择文件');
                         const text = await file.text();
