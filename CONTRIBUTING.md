@@ -159,18 +159,9 @@ Get-ChildItem release\win-unpacked -Recurse | Measure-Object -Property Length -S
 - 确保排除了其他平台的 SWC 模块
 - 检查 `package.json` 的 `files` 配置
 
-## 发布流程
-
-1. 更新版本号 (`package.json`)
-2. 更新 `README.md` 的版本信息
-3. 运行完整测试
-4. 打包所有平台
-5. 创建 GitHub Release
-6. 上传打包文件
-
 ## 许可证
 
-MIT License - 继承自 MoonTV
+MIT License
 
 ## 联系方式
 
