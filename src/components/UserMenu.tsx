@@ -613,6 +613,8 @@ export const UserMenu: React.FC = () => {
 
       let title = '';
       let items: EpisodeItem[] = [];
+      let thirdPartyUrlData: string | undefined;
+      let thirdPartyDanmakuData: any[] | undefined;
 
       if (kind === 'media_id') {
         const data = await parseMediaId(value);
@@ -633,13 +635,30 @@ export const UserMenu: React.FC = () => {
       } else if (kind === 'cid') {
         title = `cid_${value}`;
         items = [{ title: `CID ${value}`, cid: parseInt(value), section: '单集', selected: true }];
+      } else if (kind === 'third_party') {
+        const data = await parseThirdPartyUrl(value);
+        title = data.title;
+        items = data.episodes;
+        thirdPartyUrlData = data.thirdPartyUrl;
+        thirdPartyDanmakuData = data.thirdPartyData;
       } else {
-        throw new Error('无法识别输入类型，请检查输入');
+        throw new Error('不支持的输入类型，仅支持B站链接/ID和第三方平台链接（芒果TV、腾讯、优酷、爱奇艺、巴哈姆特）');
       }
 
       setBaseTitle(title);
       setEpisodes(items.map(item => ({ ...item, selected: true })));
       setDanmakuError('');
+      
+      // 保存第三方平台数据（如果有）
+      if (thirdPartyUrlData && thirdPartyDanmakuData) {
+        (window as any).__thirdPartyDanmakuCache = {
+          url: thirdPartyUrlData,
+          data: thirdPartyDanmakuData,
+        };
+      } else {
+        delete (window as any).__thirdPartyDanmakuCache;
+      }
+      
       showToast(`解析完成，共 ${items.length} 条`, 'success');
     } catch (e: any) {
       console.error('[弹幕下载] 解析失败:', e);
@@ -657,30 +676,39 @@ export const UserMenu: React.FC = () => {
     if (t.startsWith('http')) {
       try {
         const url = new URL(t);
+        const hostname = url.hostname.toLowerCase();
         const path = url.pathname;
         
-        // BV号：/video/BVxxxx
-        const bvMatch = path.match(/\/video\/(BV[0-9A-Za-z]{10,})/i);
-        if (bvMatch) return { kind: 'bvid', value: bvMatch[1] };
+        // B站链接判断
+        const isBilibiliDomain = hostname.includes('bilibili.com') || hostname.includes('b23.tv');
         
-        // 番剧：/bangumi/media/mdxxxx
-        const mdMatch = path.match(/\/bangumi\/(?:media\/)?(md\d+)/i);
-        if (mdMatch) return { kind: 'media_id', value: mdMatch[1].substring(2) };
-        
-        // 季：/bangumi/season/ssxxxx
-        const ssMatch = path.match(/\/bangumi\/(?:season\/)?(ss\d+)/i);
-        if (ssMatch) return { kind: 'season_id', value: ssMatch[1].substring(2) };
-        
-        // 集：/bangumi/play/epxxxx
-        const epMatch = path.match(/\/bangumi\/play\/(ep\d+)/i);
-        if (epMatch) return { kind: 'ep_id', value: epMatch[1].substring(2) };
-        
-        // 查询参数
-        const bvid = url.searchParams.get('bvid');
-        if (bvid) return { kind: 'bvid', value: bvid };
-        
-        const cid = url.searchParams.get('cid');
-        if (cid && /^\d+$/.test(cid)) return { kind: 'cid', value: cid };
+        if (isBilibiliDomain) {
+          // BV号：/video/BVxxxx
+          const bvMatch = path.match(/\/video\/(BV[0-9A-Za-z]{10,})/i);
+          if (bvMatch) return { kind: 'bvid', value: bvMatch[1] };
+          
+          // 番剧：/bangumi/media/mdxxxx
+          const mdMatch = path.match(/\/bangumi\/(?:media\/)?(md\d+)/i);
+          if (mdMatch) return { kind: 'media_id', value: mdMatch[1].substring(2) };
+          
+          // 季：/bangumi/season/ssxxxx
+          const ssMatch = path.match(/\/bangumi\/(?:season\/)?(ss\d+)/i);
+          if (ssMatch) return { kind: 'season_id', value: ssMatch[1].substring(2) };
+          
+          // 集：/bangumi/play/epxxxx
+          const epMatch = path.match(/\/bangumi\/play\/(ep\d+)/i);
+          if (epMatch) return { kind: 'ep_id', value: epMatch[1].substring(2) };
+          
+          // 查询参数
+          const bvid = url.searchParams.get('bvid');
+          if (bvid) return { kind: 'bvid', value: bvid };
+          
+          const cid = url.searchParams.get('cid');
+          if (cid && /^\d+$/.test(cid)) return { kind: 'cid', value: cid };
+        } else {
+          // 第三方平台链接（芒果TV、腾讯视频、优酷、爱奇艺、巴哈姆特等）
+          return { kind: 'third_party', value: t };
+        }
       } catch (e) {
         // 继续尝试正则匹配
       }
@@ -781,6 +809,88 @@ export const UserMenu: React.FC = () => {
     return { title, episodes };
   };
 
+  // 解析第三方平台链接（芒果TV、腾讯视频、优酷、爱奇艺、巴哈姆特等）
+  const parseThirdPartyUrl = async (url: string) => {
+    try {
+      const apiUrl = `https://fc.lyz05.cn/?url=${encodeURIComponent(url)}`;
+      const resp = await fetch(apiUrl);
+      
+      if (!resp.ok) {
+        throw new Error(`HTTP错误: ${resp.status}`);
+      }
+      
+      // 先获取文本内容，判断是 XML 还是 JSON
+      const textContent = await resp.text();
+      
+      let danmakuData: any[] = [];
+      let title = '';
+      
+      // 判断返回格式
+      if (textContent.trim().startsWith('<')) {
+        // XML 格式（Bilibili 格式）
+        console.log('[弹幕下载] 第三方平台返回 XML 格式');
+        danmakuData = parseXmlToDanmakuEntries(textContent);
+        
+        if (danmakuData.length === 0) {
+          throw new Error('未获取到弹幕数据，该视频可能没有弹幕');
+        }
+      } else {
+        // JSON 格式
+        console.log('[弹幕下载] 第三方平台返回 JSON 格式');
+        try {
+          const jsonData = JSON.parse(textContent);
+          
+          if (jsonData.code !== 0 && jsonData.code !== 200) {
+            throw new Error(jsonData.message || jsonData.msg || '第三方平台解析失败');
+          }
+          
+          // API 返回的弹幕数据格式
+          danmakuData = jsonData.danmaku || jsonData.data || [];
+          title = jsonData.title || '';
+          
+          if (!Array.isArray(danmakuData) || danmakuData.length === 0) {
+            throw new Error('未获取到弹幕数据，该视频可能没有弹幕');
+          }
+        } catch (parseError: any) {
+          throw new Error(`解析JSON失败: ${parseError.message}`);
+        }
+      }
+      
+      // 从URL中提取平台名称作为标题的一部分
+      let platformName = '第三方平台';
+      try {
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname.toLowerCase();
+        if (hostname.includes('mgtv.com')) platformName = '芒果TV';
+        else if (hostname.includes('qq.com') || hostname.includes('v.qq.com')) platformName = '腾讯视频';
+        else if (hostname.includes('youku.com')) platformName = '优酷';
+        else if (hostname.includes('iqiyi.com')) platformName = '爱奇艺';
+        else if (hostname.includes('gamer.com.tw')) platformName = '巴哈姆特';
+      } catch (e) {
+        // 忽略URL解析错误
+      }
+      
+      // 如果没有从JSON中获取到标题，使用平台名称
+      if (!title) {
+        title = `${platformName}视频`;
+      }
+      
+      // 第三方平台通常返回单个视频的弹幕，不分集
+      // 但我们需要构造一个伪CID来下载
+      // 直接使用 -1 作为特殊标记，在下载时直接使用API URL
+      const episodes: EpisodeItem[] = [{
+        title: title,
+        cid: -1, // 特殊标记：使用第三方API
+        section: platformName,
+      }];
+      
+      return { title, episodes, thirdPartyUrl: url, thirdPartyData: danmakuData };
+    } catch (e: any) {
+      console.error('[弹幕下载] 第三方平台解析失败:', e);
+      throw new Error(e.message || '第三方平台解析失败，请检查链接是否正确');
+    }
+  };
+
   // 处理集数点击(支持Shift范围选择)
   const handleEpisodeClick = (index: number, event: React.MouseEvent) => {
     if (event.shiftKey && lastClickedIndex !== null) {
@@ -877,19 +987,44 @@ export const UserMenu: React.FC = () => {
       let successCount = 0;
       let failCount = 0;
 
+      // 检查是否为第三方平台数据
+      const thirdPartyCache = (window as any).__thirdPartyDanmakuCache;
+      const isThirdParty = thirdPartyCache && selectedEps.length === 1 && selectedEps[0].cid === -1;
+
       for (let i = 0; i < selectedEps.length; i++) {
         const ep = selectedEps[i];
         try {
-          // 下载XML数据
-          const xmlUrl = `https://comment.bilibili.com/${ep.cid}.xml`;
-          const resp = await fetch(xmlUrl);
-          if (!resp.ok) throw new Error('下载失败');
-          const xmlData = await resp.text();
+          let xmlData = '';
+          
+          // 第三方平台特殊处理
+          if (isThirdParty && ep.cid === -1) {
+            console.log('[弹幕下载] 使用第三方平台缓存数据');
+            // 第三方平台缓存的数据是 DanmakuEntry[] 格式，需要转换为 XML
+            const danmakuEntries = thirdPartyCache.data as DanmakuEntry[];
+            xmlData = '<?xml version="1.0" encoding="UTF-8"?><i>';
+            danmakuEntries.forEach((entry: DanmakuEntry) => {
+              // 转义 XML 特殊字符
+              const escapedText = entry.text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&apos;');
+              xmlData += `<d p="${entry.time},${entry.mode},${entry.size},${entry.color},0,0,0,0">${escapedText}</d>`;
+            });
+            xmlData += '</i>';
+          } else {
+            // B站弹幕下载
+            const xmlUrl = `https://comment.bilibili.com/${ep.cid}.xml`;
+            const resp = await fetch(xmlUrl);
+            if (!resp.ok) throw new Error('下载失败');
+            xmlData = await resp.text();
+          }
 
-          // 文件名：分区_标题_cid
-          const fileName = sanitizeFilename(
-            `${ep.section || ''}_${ep.title}_cid${ep.cid}`.replace(/^_/, '')
-          );
+          // 文件名：分区_标题_cid（第三方平台不包含cid）
+          const fileName = isThirdParty 
+            ? sanitizeFilename(ep.title)
+            : sanitizeFilename(`${ep.section || ''}_${ep.title}_cid${ep.cid}`.replace(/^_/, ''));
 
           let fileData = '';
           let fileExt = format;
@@ -1882,12 +2017,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 <div className='space-y-4'>
                   {/* 输入和解析 */}
                   <div>
-                    <label className='block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300'>B站链接/ID（支持 BV/md/ss/ep/CID）</label>
+                    <label className='block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300'>链接/ID（支持 B站/芒果TV/腾讯/优酷/爱奇艺/巴哈姆特）</label>
                     <div className='flex gap-2'>
                       <input
                         type='text'
                         className='flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors'
-                        placeholder='如 https://www.bilibili.com/bangumi/media/md135652 或 BV1xx411c7mD'
+                        placeholder='如 https://www.bilibili.com/video/BV1xx 或 https://www.mgtv.com/...'
                         value={danmakuInput}
                         onChange={e => setDanmakuInput(e.target.value)}
                         onKeyPress={e => e.key === 'Enter' && handleResolveInput()}
