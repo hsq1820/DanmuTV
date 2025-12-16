@@ -25,7 +25,7 @@ DanmuTV 是基于 [MoonTV](https://github.com/MoonTechLab/LunaTV) 进行二次�
 - 🛡️ **智能去广告** - 自动跳过片头、片尾及片中广告
 - 💾 **本地数据存储** - 使用 localStorage，完全离线可用，隐私安全
 
-> 💡 **遇到弹幕过多导致卡顿？** 查看 [性能优化指南](./PERFORMANCE.md) 了解详细的优化方案
+
 
 ## 🎬 使用指南
 
