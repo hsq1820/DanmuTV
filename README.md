@@ -33,7 +33,14 @@ DanmuTV 是基于 [MoonTV](https://github.com/MoonTechLab/LunaTV) 进行二次�
 - 支持多个视频源切换
 
 ### 2️⃣ 加载弹幕
-- **方式一**: 粘贴 B站视频链接（自动解析）
+- **方式一**: 粘贴视频链接（自动解析）
+  - **Bilibili**: 支持普通视频、番剧、电影链接
+  - **芒果TV**: 如 `https://www.mgtv.com/b/336727/8087768.html`
+  - **腾讯视频**: 如 `https://v.qq.com/x/cover/53q0eh78q97e4d1/x00174aq5no.html`
+  - **优酷**: 如 `https://v.youku.com/v_show/id_XNTE5NjUxNjUyOA==.html`
+  - **爱奇艺**: 如 `https://www.iqiyi.com/v_bb6gsxzz78.html`
+  - **巴哈姆特动画瘋**: 如 `https://ani.gamer.com.tw/animeVideo.php?sn=41645`
+  - 系统会自动识别平台并获取弹幕
 - **方式二**: 输入 BV 号
 - **方式三**: 输入 CID（B站视频ID）
 - **方式四**: 上传本地 XML 弹幕文件
@@ -89,6 +96,12 @@ DanmuTV 是基于 [MoonTV](https://github.com/MoonTechLab/LunaTV) 进行二次�
   - Bilibili BV 号（支持分 P）
   - Season ID / Media ID（番剧/电影）
   - 直接粘贴 B站链接自动解析
+  - **第三方平台链接**：
+    - 芒果TV (`mgtv.com`)
+    - 腾讯视频 (`v.qq.com`)
+    - 优酷 (`youku.com`)
+    - 爱奇艺 (`iqiyi.com`)
+    - 巴哈姆特动画瘋 (`ani.gamer.com.tw`)
   - 本地 XML 弹幕文件（支持单文件和批量上传）
     - 批量上传多个文件时，自动按集数匹配
     - 文件按名称排序对应第1、2、3...集

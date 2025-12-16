@@ -4004,7 +4004,7 @@ function PlayPageClient() {
                         ? '例如 28237168'
                         : danmakuSourceType === 'cid'
                         ? '例如 210288241'
-                        : '粘贴 B站链接（含 BV/番剧 ss 或 md）或任意可解析链接'
+                        : '粘贴链接（B站/芒果TV/腾讯/优酷/爱奇艺/巴哈姆特等）'
                     }
                     className='flex-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800'
                   />
@@ -4208,12 +4208,25 @@ function PlayPageClient() {
                           id
                         )}&ep=${encodeURIComponent(String(danmakuEp))}`;
                       } else {
-                        // link：支持 BV 普链，或番剧 ss/md 链接
+                        // link：支持 BV 普链，或番剧 ss/md 链接，以及第三方平台链接
                         const link = danmakuInput.trim();
                         if (!link) throw new Error('请输入链接');
-                        url = `/api/danmaku/bilibili?link=${encodeURIComponent(
-                          link
-                        )}`;
+                        
+                        // 判断是否为 Bilibili 链接
+                        const isBilibiliLink = link.includes('bilibili.com') || 
+                                              link.includes('b23.tv') ||
+                                              /BV[0-9A-Za-z]+/i.test(link);
+                        
+                        if (isBilibiliLink) {
+                          // Bilibili 链接使用原有 API
+                          url = `/api/danmaku/bilibili?link=${encodeURIComponent(
+                            link
+                          )}`;
+                        } else {
+                          // 第三方平台链接（芒果TV、腾讯视频、优酷、爱奇艺、巴哈姆特动画瘋等）
+                          // 使用第三方弹幕转换 API
+                          url = `https://fc.lyz05.cn/?url=${encodeURIComponent(link)}`;
+                        }
                       }
 
                       // 直接把 API URL 交由插件加载，避免前端解析失败
