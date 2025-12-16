@@ -335,6 +335,73 @@ function PlayPageClient() {
     return () => clearTimeout(timer);
   }, []); // 只在组件挂载时执行一次
   
+  // 拖放弹幕文件加载功能
+  useEffect(() => {
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      const file = files[0];
+      const fileName = file.name.toLowerCase();
+      
+      // 检查文件格式
+      const supportedFormats = ['.xml', '.ass', '.json'];
+      const isSupported = supportedFormats.some(ext => fileName.endsWith(ext));
+      
+      if (!isSupported) {
+        showPlayerNotice(`不支持的文件格式，仅支持 ${supportedFormats.join(', ')} 格式`, 3000);
+        return;
+      }
+
+      try {
+        showPlayerNotice(`正在加载弹幕文件: ${file.name}`, 2000);
+        
+        // 读取文件内容
+        const text = await file.text();
+        const data = await fetchDanmakuFromText(text);
+        
+        // 添加到弹幕源列表
+        const newSource: LoadedDanmakuSource = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          type: 'local',
+          label: file.name,
+          count: data.length,
+          data: data,
+        };
+        
+        const newSources = [...loadedDanmakuSources, newSource];
+        setLoadedDanmakuSources(newSources);
+        saveLoadedDanmakuSources(newSources);
+        
+        showPlayerNotice(`已添加弹幕文件: ${file.name} (${data.length}条)`, 2500);
+        console.log('[danmaku] 通过拖放添加弹幕文件:', file.name, data.length);
+      } catch (e: any) {
+        console.error('[danmaku] 拖放加载弹幕失败:', e);
+        showPlayerNotice(`加载失败: ${e.message || '未知错误'}`, 3000);
+      }
+    };
+
+    // 添加到 document 以捕获整个页面的拖放
+    document.addEventListener('dragover', handleDragOver);
+    document.addEventListener('drop', handleDrop);
+
+    return () => {
+      document.removeEventListener('dragover', handleDragOver);
+      document.removeEventListener('drop', handleDrop);
+    };
+  }, [loadedDanmakuSources]); // 依赖 loadedDanmakuSources 以获取最新状态
+  
   // 弹幕优化：密度限制与关键词屏蔽
   const [danmakuLimitPerSec, setDanmakuLimitPerSec] = useState<number>(() => {
     try {
