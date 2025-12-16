@@ -238,6 +238,20 @@ function PlayPageClient() {
       return '';
     }
   });
+  
+  // 弹幕性能优化：最大数量限制
+  const [danmakuMaxTotal, setDanmakuMaxTotal] = useState<number>(() => {
+    try {
+      const v = typeof window !== 'undefined'
+        ? localStorage.getItem('danmaku_max_total')
+        : null;
+      const n = v ? Number(v) : 20000; // 默认最多2万条
+      return Number.isFinite(n) && n > 0 ? n : 20000;
+    } catch {
+      return 20000;
+    }
+  });
+  
   // 弹幕合并开关
   const [danmakuMergeEnabled, setDanmakuMergeEnabled] = useState<boolean>(() => {
     try {
@@ -1003,8 +1017,42 @@ function PlayPageClient() {
     }
     const text = await r.text();
     let data = parseDanmakuText(text);
+    const originalTotal = data.length;
     console.log('[danmaku] 解析弹幕', { url, dataLen: data.length });
     if (!data.length) throw new Error('弹幕解析为空');
+
+    // 性能优化：大量弹幕时智能采样
+    if (data.length > danmakuMaxTotal) {
+      console.warn(`[danmaku] 弹幕数量过多 (${data.length}条)，启用智能采样至 ${danmakuMaxTotal} 条`);
+      
+      // 智能采样策略：优先保留关键时间点的弹幕
+      const sampleRatio = danmakuMaxTotal / data.length;
+      const sampled: any[] = [];
+      
+      // 按时间分组，每组随机采样
+      const timeGroups = new Map<number, any[]>();
+      data.forEach(item => {
+        const timeKey = Math.floor((item.time || 0) / 10); // 每10秒一组
+        if (!timeGroups.has(timeKey)) timeGroups.set(timeKey, []);
+        timeGroups.get(timeKey)!.push(item);
+      });
+      
+      // 从每组中按比例采样
+      timeGroups.forEach((group) => {
+        const keepCount = Math.max(1, Math.ceil(group.length * sampleRatio));
+        // 随机采样
+        const shuffled = group.sort(() => Math.random() - 0.5);
+        sampled.push(...shuffled.slice(0, keepCount));
+      });
+      
+      // 按时间重新排序
+      data = sampled.sort((a, b) => (a.time || 0) - (b.time || 0));
+      
+      showPlayerNotice(
+        `弹幕过多已优化：原始 ${originalTotal.toLocaleString()} 条 → 采样 ${data.length.toLocaleString()} 条`,
+        4000
+      );
+    }
 
     // 从localStorage读取最新的合并状态（避免闭包中的旧值）
     let currentMergeEnabled = false;
@@ -1104,8 +1152,37 @@ function PlayPageClient() {
   // 从文本内容加载(用于本地文件)
   const loadDanmakuFromText = async (text: string) => {
     let data = parseDanmakuText(text);
+    const originalTotal = data.length;
     console.log('[danmaku] 解析本地弹幕', { dataLen: data.length });
     if (!data.length) throw new Error('弹幕解析为空');
+
+    // 性能优化：大量弹幕时智能采样
+    if (data.length > danmakuMaxTotal) {
+      console.warn(`[danmaku] 弹幕数量过多 (${data.length}条)，启用智能采样至 ${danmakuMaxTotal} 条`);
+      
+      const sampleRatio = danmakuMaxTotal / data.length;
+      const sampled: any[] = [];
+      
+      const timeGroups = new Map<number, any[]>();
+      data.forEach(item => {
+        const timeKey = Math.floor((item.time || 0) / 10);
+        if (!timeGroups.has(timeKey)) timeGroups.set(timeKey, []);
+        timeGroups.get(timeKey)!.push(item);
+      });
+      
+      timeGroups.forEach((group) => {
+        const keepCount = Math.max(1, Math.ceil(group.length * sampleRatio));
+        const shuffled = group.sort(() => Math.random() - 0.5);
+        sampled.push(...shuffled.slice(0, keepCount));
+      });
+      
+      data = sampled.sort((a, b) => (a.time || 0) - (b.time || 0));
+      
+      showPlayerNotice(
+        `本地弹幕过多已优化：原始 ${originalTotal.toLocaleString()} 条 → 采样 ${data.length.toLocaleString()} 条`,
+        4000
+      );
+    }
 
     // 从localStorage读取最新的合并状态（避免闭包中的旧值）
     let currentMergeEnabled = false;
@@ -2854,6 +2931,7 @@ function PlayPageClient() {
                   <div class="art-danmaku-menu-item" data-action="offset-right-5" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">对轴 - 右5秒</div>
                   <div class="art-danmaku-menu-item" data-action="keywords" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">关键词屏蔽</div>
                   <div class="art-danmaku-menu-item" data-action="density" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">密度限制(条/秒)</div>
+                  <div class="art-danmaku-menu-item" data-action="max-total" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">最大数量限制</div>
                   <div class="art-danmaku-menu-item" data-action="toggle-merge" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">弹幕合并: ${danmakuMergeEnabled ? '已开启' : '已关闭'}</div>
                   <div class="art-danmaku-menu-item" data-action="merge-window" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">合并窗口(秒)</div>
                   <div class="art-danmaku-menu-item" data-action="apply-filter" style="padding: 8px 16px; cursor: pointer; white-space: nowrap; font-size: 14px; color: #fff;">应用当前过滤规则</div>
@@ -3044,6 +3122,30 @@ function PlayPageClient() {
                     
                     // 直接使用新值重新加载弹幕(不依赖状态更新)
                     await reloadDanmakuWithFilter(danmakuKeywords, n);
+                    break;
+                  }
+
+                  case 'max-total': {
+                    const val = await showInputDialog(
+                      '最大弹幕总数限制\n超过此数量将智能采样\n(建议: 5000-50000, 0表示不限)',
+                      String(danmakuMaxTotal)
+                    );
+                    if (val === null) break; // 用户取消
+                    
+                    const n = Math.max(0, Number(val) || 20000);
+                    setDanmakuMaxTotal(n);
+                    try {
+                      localStorage.setItem('danmaku_max_total', String(n));
+                    } catch (e) {
+                      console.error('[DanmuTV] 保存最大数量限制失败:', e);
+                    }
+                    
+                    showPlayerNotice(
+                      n === 0 
+                        ? '已取消最大数量限制（可能导致卡顿）' 
+                        : `最大弹幕数已设为 ${n.toLocaleString()} 条\n重新加载弹幕后生效`,
+                      3000
+                    );
                     break;
                   }
 
