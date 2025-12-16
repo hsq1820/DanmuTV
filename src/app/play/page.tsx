@@ -228,30 +228,27 @@ function PlayPageClient() {
   }
   
   // 从 localStorage 恢复弹幕源
-  const [loadedDanmakuSources, setLoadedDanmakuSources] = useState<LoadedDanmakuSource[]>(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('loaded_danmaku_sources');
-        if (saved) {
-          const sources = JSON.parse(saved);
-          console.log('[danmaku] 从 localStorage 恢复弹幕源:', sources.length);
-          return sources;
-        }
-      }
-    } catch (e) {
-      console.warn('[danmaku] 恢复弹幕源失败:', e);
-    }
-    return [];
-  });
+  const [loadedDanmakuSources, setLoadedDanmakuSources] = useState<LoadedDanmakuSource[]>([]);
   
   const [danmakuApplied, setDanmakuApplied] = useState(false); // 标记弹幕是否已应用到播放器
+  
+  // 获取当前视频的弹幕源存储key
+  const getDanmakuSourcesKey = () => {
+    const source = searchParams.get('source') || currentSource;
+    const id = searchParams.get('id') || currentId;
+    if (!source || !id) {
+      return 'loaded_danmaku_sources_default';
+    }
+    return `loaded_danmaku_sources_${source}_${id}`;
+  };
   
   // 保存弹幕源到 localStorage
   const saveLoadedDanmakuSources = (sources: LoadedDanmakuSource[]) => {
     try {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('loaded_danmaku_sources', JSON.stringify(sources));
-        console.log('[danmaku] 已保存弹幕源到 localStorage:', sources.length);
+        const key = getDanmakuSourcesKey();
+        localStorage.setItem(key, JSON.stringify(sources));
+        console.log(`[danmaku] 已保存弹幕源到 localStorage (${key}):`, sources.length);
       }
     } catch (e) {
       console.warn('[danmaku] 保存弹幕源失败:', e);
@@ -323,6 +320,38 @@ function PlayPageClient() {
     showPlayerNotice(msg, 2500);
   };
   
+  // 当视频ID变化时，加载对应的弹幕源
+  useEffect(() => {
+    const loadDanmakuSourcesForCurrentVideo = () => {
+      try {
+        if (typeof window !== 'undefined') {
+          const key = getDanmakuSourcesKey();
+          const saved = localStorage.getItem(key);
+          if (saved) {
+            const sources = JSON.parse(saved);
+            console.log(`[danmaku] 从 localStorage 恢复弹幕源 (${key}):`, sources.length);
+            setLoadedDanmakuSources(sources);
+            setDanmakuApplied(false); // 重置应用状态
+          } else {
+            console.log(`[danmaku] 该视频暂无已保存的弹幕源 (${key})`);
+            setLoadedDanmakuSources([]);
+            setDanmakuApplied(false);
+          }
+        }
+      } catch (e) {
+        console.warn('[danmaku] 恢复弹幕源失败:', e);
+        setLoadedDanmakuSources([]);
+      }
+    };
+    
+    // 当视频source或id变化时重新加载
+    const source = searchParams.get('source') || currentSource;
+    const id = searchParams.get('id') || currentId;
+    if (source && id) {
+      loadDanmakuSourcesForCurrentVideo();
+    }
+  }, [searchParams, currentSource, currentId]);
+  
   // 页面加载时自动恢复并应用弹幕源
   useEffect(() => {
     // 延迟执行，确保播放器已初始化
@@ -334,7 +363,7 @@ function PlayPageClient() {
     }, 2000);
     
     return () => clearTimeout(timer);
-  }, []); // 只在组件挂载时执行一次
+  }, [loadedDanmakuSources]); // 依赖 loadedDanmakuSources，当其变化时重新执行
   
   // 拖放弹幕文件加载功能
   useEffect(() => {
