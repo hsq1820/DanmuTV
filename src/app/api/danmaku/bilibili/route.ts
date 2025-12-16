@@ -20,6 +20,12 @@ function extractBangumi(
   return null;
 }
 
+function extractEpId(input?: string | null): string | null {
+  if (!input) return null;
+  const ep = input.match(/bangumi\/play\/ep(\d+)/i);
+  return ep && ep[1] ? ep[1] : null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -29,94 +35,144 @@ export async function GET(req: NextRequest) {
     const page = Number(searchParams.get('p') || '1'); // for BV 分P
     let mediaIdParam = searchParams.get('media_id');
     let seasonIdParam = searchParams.get('season_id');
-    // 允许从 link 自动识别番剧 ss/md
-    if (!seasonIdParam && !mediaIdParam && link) {
+    let epIdParam = searchParams.get('ep_id'); // 添加 ep_id 参数支持
+    // 允许从 link 自动识别番剧 ss/md/ep
+    if (!seasonIdParam && !mediaIdParam && !epIdParam && link) {
       const bangumi = extractBangumi(link);
       if (bangumi?.season_id) seasonIdParam = bangumi.season_id;
       if (bangumi?.media_id) mediaIdParam = bangumi.media_id;
+      // 尝试提取 ep_id
+      const epId = extractEpId(link);
+      if (epId) epIdParam = epId;
     }
     const epIndex = Number(searchParams.get('ep') || '1'); // 选择集数（1基），用于番剧
 
     let cid: string | undefined = cidParam ?? undefined;
 
     if (!cid) {
-      // 优先支持番剧入口：media_id / season_id
-      let seasonId = seasonIdParam ? Number(seasonIdParam) : undefined;
-
-      if (!seasonId && mediaIdParam) {
-        // 通过 media_id 获取 season_id
-        type ReviewUserResp = {
-          code: number;
-          result?: { media?: { season_id?: number | string } };
-        };
-        const reviewResp = await fetch(
-          `https://api.bilibili.com/pgc/review/user?media_id=${encodeURIComponent(
-            mediaIdParam
-          )}`,
-          { headers: { 'user-agent': 'Mozilla/5.0' }, cache: 'no-store' }
-        );
-        if (!reviewResp.ok) {
-          return NextResponse.json(
-            { error: 'media_id 解析 season_id 失败' },
-            { status: reviewResp.status }
-          );
+      // 如果提供了 ep_id，通过 ep_id 获取 cid
+      if (epIdParam) {
+        // 支持 "ep733316" 或 "733316" 两种格式
+        let epId = epIdParam;
+        if (/^ep\d+$/i.test(epId)) {
+          epId = epId.substring(2);
         }
-        const reviewJson: ReviewUserResp = await reviewResp.json();
-        const sid = reviewJson?.result?.media?.season_id;
-        if (!sid) {
-          return NextResponse.json(
-            { error: '未解析到 season_id' },
-            { status: 404 }
-          );
-        }
-        seasonId = typeof sid === 'string' ? Number(sid) : sid;
-      }
-
-      if (seasonId) {
-        // 通过 season_id 解析主正片列表的 cid
-        type SectionEpisode = { cid?: number; title?: string };
-        type SeasonSectionResp = {
+        
+        type EpViewResp = {
           code: number;
+          message?: string;
           result?: {
-            main_section?: { episodes?: SectionEpisode[] };
-            section?: Array<{ episodes?: SectionEpisode[] }>;
+            episodes?: Array<{ id?: number; cid?: number }>;
           };
         };
-        const sectionResp = await fetch(
-          `https://api.bilibili.com/pgc/web/season/section?season_id=${encodeURIComponent(
-            String(seasonId)
-          )}`,
+        const epResp = await fetch(
+          `https://api.bilibili.com/pgc/view/web/season?ep_id=${encodeURIComponent(epId)}`,
           { headers: { 'user-agent': 'Mozilla/5.0' }, cache: 'no-store' }
         );
-        if (!sectionResp.ok) {
+        if (!epResp.ok) {
           return NextResponse.json(
-            { error: 'season_id 解析剧集失败' },
-            { status: sectionResp.status }
+            { error: 'ep_id 解析失败' },
+            { status: epResp.status }
           );
         }
-        const sectionJson: SeasonSectionResp = await sectionResp.json();
-        const episodes =
-          sectionJson?.result?.main_section?.episodes &&
-          Array.isArray(sectionJson.result.main_section.episodes)
-            ? sectionJson.result.main_section.episodes
-            : [];
-        if (episodes.length === 0) {
+        const epJson: EpViewResp = await epResp.json();
+        if (epJson.code !== 0) {
           return NextResponse.json(
-            { error: '未找到正片剧集列表' },
+            { error: epJson.message || 'ep_id 解析失败' },
+            { status: 400 }
+          );
+        }
+        const episodes = epJson?.result?.episodes || [];
+        // 在剧集列表中找到对应的 ep_id
+        const targetEp = episodes.find(ep => String(ep.id) === epId);
+        if (!targetEp?.cid) {
+          return NextResponse.json(
+            { error: '未找到该 ep_id 对应的 cid' },
             { status: 404 }
           );
         }
-        const idx = Math.max(
-          0,
-          Math.min(episodes.length - 1, (epIndex || 1) - 1)
-        );
-        const chosen = episodes[idx];
-        cid = chosen?.cid != null ? String(chosen.cid) : undefined;
-        if (!cid) {
-          return NextResponse.json(
-            { error: '该集未解析到 cid' },
-            { status: 404 }
+        cid = String(targetEp.cid);
+      }
+      
+      // 优先支持番剧入口：media_id / season_id
+      if (!cid) {
+        let seasonId = seasonIdParam ? Number(seasonIdParam) : undefined;
+
+        if (!seasonId && mediaIdParam) {
+          // 通过 media_id 获取 season_id
+          type ReviewUserResp = {
+            code: number;
+            result?: { media?: { season_id?: number | string } };
+          };
+          const reviewResp = await fetch(
+            `https://api.bilibili.com/pgc/review/user?media_id=${encodeURIComponent(
+              mediaIdParam
+            )}`,
+            { headers: { 'user-agent': 'Mozilla/5.0' }, cache: 'no-store' }
           );
+          if (!reviewResp.ok) {
+            return NextResponse.json(
+              { error: 'media_id 解析 season_id 失败' },
+              { status: reviewResp.status }
+            );
+          }
+          const reviewJson: ReviewUserResp = await reviewResp.json();
+          const sid = reviewJson?.result?.media?.season_id;
+          if (!sid) {
+            return NextResponse.json(
+              { error: '未解析到 season_id' },
+              { status: 404 }
+            );
+          }
+          seasonId = typeof sid === 'string' ? Number(sid) : sid;
+        }
+
+        if (seasonId) {
+          // 通过 season_id 解析主正片列表的 cid
+          type SectionEpisode = { cid?: number; title?: string };
+          type SeasonSectionResp = {
+            code: number;
+            result?: {
+              main_section?: { episodes?: SectionEpisode[] };
+              section?: Array<{ episodes?: SectionEpisode[] }>;
+            };
+          };
+          const sectionResp = await fetch(
+            `https://api.bilibili.com/pgc/web/season/section?season_id=${encodeURIComponent(
+              String(seasonId)
+            )}`,
+            { headers: { 'user-agent': 'Mozilla/5.0' }, cache: 'no-store' }
+          );
+          if (!sectionResp.ok) {
+            return NextResponse.json(
+              { error: 'season_id 解析剧集失败' },
+              { status: sectionResp.status }
+            );
+          }
+          const sectionJson: SeasonSectionResp = await sectionResp.json();
+          const episodes =
+            sectionJson?.result?.main_section?.episodes &&
+            Array.isArray(sectionJson.result.main_section.episodes)
+              ? sectionJson.result.main_section.episodes
+              : [];
+          if (episodes.length === 0) {
+            return NextResponse.json(
+              { error: '未找到正片剧集列表' },
+              { status: 404 }
+            );
+          }
+          const idx = Math.max(
+            0,
+            Math.min(episodes.length - 1, (epIndex || 1) - 1)
+          );
+          const chosen = episodes[idx];
+          cid = chosen?.cid != null ? String(chosen.cid) : undefined;
+          if (!cid) {
+            return NextResponse.json(
+              { error: '该集未解析到 cid' },
+              { status: 404 }
+            );
+          }
         }
       }
     }
@@ -126,7 +182,7 @@ export async function GET(req: NextRequest) {
       if (!bv) {
         return NextResponse.json(
           {
-            error: '缺少可用参数（需要 cid 或 season_id/media_id 或 bv/link）',
+            error: '缺少可用参数（需要 cid 或 season_id/media_id/ep_id 或 bv/link）',
           },
           { status: 400 }
         );

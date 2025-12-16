@@ -207,6 +207,7 @@ function PlayPageClient() {
     | 'link'
     | 'season_id'
     | 'media_id'
+    | 'ep_id'
     | 'cid'
     | 'local';
   const [danmakuSourceType, setDanmakuSourceType] =
@@ -4142,6 +4143,15 @@ function PlayPageClient() {
                         if (!id) throw new Error('请输入 media_id');
                         url = `/api/danmaku/bilibili?media_id=${encodeURIComponent(id)}&ep=${encodeURIComponent(String(danmakuEp))}`;
                         sourceLabel = `Media: ${id} EP${danmakuEp}`;
+                      } else if (danmakuSourceType === 'ep_id') {
+                        let id = danmakuInput.trim();
+                        if (!id) throw new Error('请输入 ep_id');
+                        // 支持 "ep733316" 或 "733316" 两种格式
+                        if (/^ep\d+$/i.test(id)) {
+                          id = id.substring(2);
+                        }
+                        url = `/api/danmaku/bilibili?ep_id=${encodeURIComponent(id)}`;
+                        sourceLabel = `EP: ${id}`;
                       } else {
                         const link = danmakuInput.trim();
                         if (!link) throw new Error('请输入链接');
@@ -4237,6 +4247,7 @@ function PlayPageClient() {
                   <option value='bv'>BV</option>
                   <option value='season_id'>season_id</option>
                   <option value='media_id'>media_id</option>
+                  <option value='ep_id'>ep_id</option>
                   <option value='cid'>cid</option>
                   <option value='local'>本地</option>
                 </select>
@@ -4256,6 +4267,8 @@ function PlayPageClient() {
                         ? '例如 33802'
                         : danmakuSourceType === 'media_id'
                         ? '例如 28237168'
+                        : danmakuSourceType === 'ep_id'
+                        ? '例如 733316 或 ep733316'
                         : danmakuSourceType === 'cid'
                         ? '例如 210288241'
                         : '粘贴链接（B站/芒果TV/腾讯/优酷/爱奇艺/巴哈姆特等）'
